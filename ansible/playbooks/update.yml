@@ -1,0 +1,35 @@
+# Manual OS update across the fleet, one machine at a time.
+#   ansible-playbook playbooks/update.yml                 # everything
+#   ansible-playbook playbooks/update.yml --limit ai-pc   # one machine
+#   ansible-playbook playbooks/update.yml -e reboot=false # never reboot
+- name: Update OS packages
+  hosts: homelab
+  become: true
+  serial: 1                       # never take all machines down together
+  vars:
+    reboot: true
+  tasks:
+    - name: Upgrade packages
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: dist
+        autoremove: true
+      register: upgrade
+
+    - name: Reboot required?
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_flag
+
+    - name: Reboot
+      ansible.builtin.reboot:
+        reboot_timeout: 900
+      when: reboot | bool and reboot_flag.stat.exists
+
+    - name: Prune unused docker images (older than 7 days)
+      ansible.builtin.command: docker image prune -af --filter "until=168h"
+      changed_when: false
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: changed={{ upgrade.changed }} reboot_needed={{ reboot_flag.stat.exists }}"

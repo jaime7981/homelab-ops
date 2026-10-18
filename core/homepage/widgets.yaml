@@ -1,0 +1,14 @@
+# Top bar. Resources = the core host itself; per-machine metrics live in Beszel.
+- resources:
+    label: core-pc
+    cpu: true
+    memory: true
+    disk: /
+- datetime:
+    text_size: md
+    format:
+      timeStyle: short
+      dateStyle: short
+- search:
+    provider: duckduckgo
+    target: _blank

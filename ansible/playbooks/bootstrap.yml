@@ -1,0 +1,91 @@
+# Same as scripts/bootstrap-node.sh, for one or many machines at once.
+#   ansible-playbook playbooks/bootstrap.yml --limit new-pc
+# Assumes the machine is already on the tailnet (sudo tailscale up --ssh).
+- name: Bootstrap homelab machine
+  hosts: homelab
+  become: true
+  tasks:
+    - name: Base packages
+      ansible.builtin.apt:
+        name: [ca-certificates, curl, git, ufw, unattended-upgrades, apt-listchanges,
+                needrestart, lynis, jq, cockpit]
+        update_cache: true
+
+    - name: Automatic security updates
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+
+    - name: Check Docker
+      ansible.builtin.command: docker --version
+      register: docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Docker
+      ansible.builtin.shell: curl -fsSL https://get.docker.com | sh
+      when: docker_check.rc != 0
+
+    - name: Docker log rotation
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: '{ "log-driver": "json-file", "log-opts": { "max-size": "20m", "max-file": "5" } }'
+      notify: Restart docker
+
+    - name: User in docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Cockpit enabled
+      ansible.builtin.systemd:
+        name: cockpit.socket
+        enabled: true
+        state: started
+
+    - name: SSH hardening
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/10-homelab.conf
+        content: |
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PermitRootLogin no
+      notify: Reload ssh
+
+    - name: Firewall - allow tailscale0
+      community.general.ufw:
+        rule: allow
+        interface: tailscale0
+        direction: in
+
+    - name: Firewall - tailscale direct connections
+      community.general.ufw:
+        rule: allow
+        port: "41641"
+        proto: udp
+
+    - name: Firewall - LAN
+      community.general.ufw:
+        rule: allow
+        from_ip: "{{ allow_lan_cidr }}"
+      when: allow_lan_cidr | default('') | length > 0
+
+    - name: Firewall - default deny inbound, enable
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+  handlers:
+    - name: Restart docker
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+    - name: Reload ssh
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded

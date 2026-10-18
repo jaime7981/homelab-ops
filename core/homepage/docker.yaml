@@ -1,0 +1,4 @@
+# Read-only Docker access for container status dots (through socket-proxy).
+core-docker:
+  host: socket-proxy
+  port: 2375

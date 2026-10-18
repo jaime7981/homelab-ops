@@ -1,0 +1,369 @@
+# Management core — runs on ONE host (the most reliable machine).
+# Every other machine only runs ../node/compose.yaml.
+#
+#   docker compose --env-file .env up -d
+#
+# Two ways in (see docs/access.md):
+#   public  : *.${DOMAIN}      -> Cloudflare Access -> cloudflared -> traefik:8080 (entrypoint "web")
+#   tailnet : *.lab.${DOMAIN}  -> Tailscale VPN     -> traefik:443 on the Tailscale IP (entrypoint "tailnet")
+
+name: mgmt
+
+x-common: &common
+  restart: unless-stopped
+  environment:
+    TZ: ${TZ}
+
+networks:
+  proxy:
+    name: proxy
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16   # trusted for X-Forwarded-For in traefik "web" entrypoint
+  internal:
+    name: mgmt-internal
+    internal: true
+
+volumes:
+  traefik-certs:
+  authentik-db:
+  komodo-pg:
+  komodo-ferret:
+  komodo-keys:
+  komodo-backups:
+  beszel-data:
+  kuma-data:
+  ntfy-cache:
+  ntfy-etc:
+  crowdsec-db:
+  crowdsec-config:
+
+services:
+
+  # ─────────────────────────── Edge ───────────────────────────
+
+  traefik:
+    <<: *common
+    image: traefik:v3.5
+    container_name: traefik
+    command:
+      - --api.dashboard=true
+      - --log.level=INFO
+      - --accesslog=true
+      - --accesslog.filepath=/var/log/traefik/access.log
+      - --accesslog.format=json
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=proxy
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      # entrypoint for traffic coming from cloudflared (never published on the host)
+      - --entrypoints.web.address=:8080
+      - --entrypoints.web.forwardedheaders.trustedips=172.30.0.0/16
+      # entrypoint for tailnet-only traffic, TLS via Cloudflare DNS challenge
+      - --entrypoints.tailnet.address=:443
+      - --entrypoints.tailnet.http.tls=true
+      - --entrypoints.tailnet.http.tls.certresolver=cf
+      - --entrypoints.tailnet.http.tls.domains[0].main=lab.${DOMAIN}
+      - --entrypoints.tailnet.http.tls.domains[0].sans=*.lab.${DOMAIN}
+      - --certificatesresolvers.cf.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cf.acme.storage=/certs/acme.json
+      - --certificatesresolvers.cf.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.cf.acme.dnschallenge.resolvers=1.1.1.1:53
+      - --experimental.plugins.crowdsec.modulename=github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+      - --experimental.plugins.crowdsec.version=v1.4.4
+    environment:
+      TZ: ${TZ}
+      DOMAIN: ${DOMAIN}
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
+      CROWDSEC_BOUNCER_KEY: ${CROWDSEC_BOUNCER_KEY}
+    ports:
+      - ${TAILSCALE_IP}:443:443        # only reachable over Tailscale
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/logs:/var/log/traefik
+      - traefik-certs:/certs
+    networks: [proxy]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.traefik.rule: Host(`traefik.lab.${DOMAIN}`)
+      traefik.http.routers.traefik.entrypoints: tailnet
+      traefik.http.routers.traefik.service: api@internal
+      traefik.http.routers.traefik.middlewares: secured-tailnet@file
+
+  cloudflared:
+    <<: *common
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    networks: [proxy]
+    depends_on: [traefik]
+
+  crowdsec:
+    <<: *common
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    environment:
+      TZ: ${TZ}
+      COLLECTIONS: crowdsecurity/traefik crowdsecurity/linux crowdsecurity/sshd crowdsecurity/http-cve
+      BOUNCER_KEY_traefik: ${CROWDSEC_BOUNCER_KEY}
+    volumes:
+      - ./crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - ./traefik/logs:/var/log/traefik:ro
+      - /var/log/auth.log:/var/log/auth.log:ro
+      - crowdsec-db:/var/lib/crowdsec/data
+      - crowdsec-config:/etc/crowdsec
+    ports:
+      - ${TAILSCALE_IP}:8081:8080      # Local API — node agents report here over Tailscale
+    networks: [proxy]
+
+  # ─────────────────────────── Identity ───────────────────────────
+
+  authentik-db:
+    <<: *common
+    image: docker.io/library/postgres:16-alpine
+    container_name: authentik-db
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASS:?required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d authentik -U authentik"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    volumes:
+      - authentik-db:/var/lib/postgresql/data
+    networks: [internal]
+
+  authentik-server:
+    <<: *common
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
+    container_name: authentik-server
+    command: server
+    shm_size: 512mb
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+    environment: &authentik-env
+      TZ: ${TZ}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?required}
+      AUTHENTIK_POSTGRESQL__HOST: authentik-db
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASS}
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+    volumes:
+      - ./authentik/data:/data
+      - ./authentik/custom-templates:/templates
+    networks: [proxy, internal]
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.authentik.loadbalancer.server.port: "9000"
+      # Login portal. NOT behind Cloudflare Access (OIDC clients must reach it); protected by CrowdSec + MFA.
+      traefik.http.routers.authentik-pub.rule: Host(`auth.${DOMAIN}`)
+      traefik.http.routers.authentik-pub.entrypoints: web
+      traefik.http.routers.authentik-pub.middlewares: crowdsec@file,security-headers@file
+      traefik.http.routers.authentik-ts.rule: Host(`auth.lab.${DOMAIN}`)
+      traefik.http.routers.authentik-ts.entrypoints: tailnet
+      traefik.http.routers.authentik-ts.middlewares: tailnet-only@file,security-headers@file
+      # Embedded outpost callback path, on every host name (needed for forward-auth)
+      traefik.http.routers.authentik-outpost.rule: PathPrefix(`/outpost.goauthentik.io/`)
+      traefik.http.routers.authentik-outpost.entrypoints: web,tailnet
+      traefik.http.routers.authentik-outpost.priority: "1000"
+
+  authentik-worker:
+    <<: *common
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
+    container_name: authentik-worker
+    command: worker
+    shm_size: 512mb
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+    environment: *authentik-env
+    volumes:
+      - ./authentik/data:/data
+      - ./authentik/certs:/certs
+      - ./authentik/custom-templates:/templates
+    networks: [internal]
+
+  # ─────────────────────────── Fleet management ───────────────────────────
+
+  komodo-pg:
+    <<: *common
+    image: ghcr.io/ferretdb/postgres-documentdb:17
+    container_name: komodo-pg
+    labels:
+      komodo.skip: ""
+    environment:
+      POSTGRES_USER: ${KOMODO_DB_USERNAME}
+      POSTGRES_PASSWORD: ${KOMODO_DB_PASSWORD}
+      POSTGRES_DB: postgres            # do not change
+    volumes:
+      - komodo-pg:/var/lib/postgresql/data
+    networks: [internal]
+
+  komodo-ferretdb:
+    <<: *common
+    image: ghcr.io/ferretdb/ferretdb:2
+    container_name: komodo-ferretdb
+    labels:
+      komodo.skip: ""
+    depends_on: [komodo-pg]
+    environment:
+      FERRETDB_POSTGRESQL_URL: postgres://${KOMODO_DB_USERNAME}:${KOMODO_DB_PASSWORD}@komodo-pg:5432/postgres
+    volumes:
+      - komodo-ferret:/state
+    networks: [internal]
+
+  komodo-core:
+    <<: *common
+    image: ghcr.io/moghtech/komodo-core:2
+    container_name: komodo-core
+    init: true
+    depends_on: [komodo-ferretdb]
+    environment:
+      TZ: ${TZ}
+      KOMODO_TITLE: Homelab
+      KOMODO_HOST: https://komodo.${DOMAIN}
+      KOMODO_DATABASE_ADDRESS: komodo-ferretdb:27017
+      KOMODO_DATABASE_USERNAME: ${KOMODO_DB_USERNAME}
+      KOMODO_DATABASE_PASSWORD: ${KOMODO_DB_PASSWORD}
+      KOMODO_JWT_SECRET: ${KOMODO_JWT_SECRET}
+      KOMODO_WEBHOOK_SECRET: ${KOMODO_WEBHOOK_SECRET}
+      KOMODO_LOCAL_AUTH: "true"                     # keep as break-glass login
+      KOMODO_DISABLE_USER_REGISTRATION: "true"
+      KOMODO_INIT_ADMIN_USERNAME: ${KOMODO_INIT_ADMIN_USERNAME}
+      KOMODO_INIT_ADMIN_PASSWORD: ${KOMODO_INIT_ADMIN_PASSWORD}
+      KOMODO_OIDC_ENABLED: ${KOMODO_OIDC_ENABLED:-false}
+      KOMODO_OIDC_PROVIDER: https://auth.${DOMAIN}/application/o/komodo/
+      KOMODO_OIDC_CLIENT_ID: ${KOMODO_OIDC_CLIENT_ID:-}
+      KOMODO_OIDC_CLIENT_SECRET: ${KOMODO_OIDC_CLIENT_SECRET:-}
+    ports:
+      - ${TAILSCALE_IP}:9120:9120      # periphery agents connect here (outbound, over Tailscale)
+    volumes:
+      - komodo-keys:/config/keys
+      - komodo-backups:/backups
+    networks: [proxy, internal]
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.komodo.loadbalancer.server.port: "9120"
+      traefik.http.routers.komodo-pub.rule: Host(`komodo.${DOMAIN}`)
+      traefik.http.routers.komodo-pub.entrypoints: web
+      traefik.http.routers.komodo-pub.middlewares: secured-public@file
+      traefik.http.routers.komodo-ts.rule: Host(`komodo.lab.${DOMAIN}`)
+      traefik.http.routers.komodo-ts.entrypoints: tailnet
+      traefik.http.routers.komodo-ts.middlewares: secured-tailnet@file
+      # GitHub push webhooks -> auto deploy. Authenticated by KOMODO_WEBHOOK_SECRET, not SSO.
+      traefik.http.routers.komodo-hook.rule: Host(`komodo.${DOMAIN}`) && PathPrefix(`/listener`)
+      traefik.http.routers.komodo-hook.entrypoints: web
+      traefik.http.routers.komodo-hook.middlewares: crowdsec@file
+      traefik.http.routers.komodo-hook.priority: "500"
+
+  # ─────────────────────────── Observability ───────────────────────────
+
+  beszel:
+    <<: *common
+    image: henrygd/beszel:latest
+    container_name: beszel
+    environment:
+      TZ: ${TZ}
+      APP_URL: https://beszel.${DOMAIN}
+    ports:
+      - ${TAILSCALE_IP}:8090:8090      # agents connect here over Tailscale
+    volumes:
+      - beszel-data:/beszel_data
+    networks: [proxy]
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.beszel.loadbalancer.server.port: "8090"
+      traefik.http.routers.beszel-pub.rule: Host(`beszel.${DOMAIN}`)
+      traefik.http.routers.beszel-pub.entrypoints: web
+      traefik.http.routers.beszel-pub.middlewares: secured-public@file
+      traefik.http.routers.beszel-ts.rule: Host(`beszel.lab.${DOMAIN}`)
+      traefik.http.routers.beszel-ts.entrypoints: tailnet
+      traefik.http.routers.beszel-ts.middlewares: secured-tailnet@file
+
+  # Move to ../offsite once you have a VPS, so it can alert when the house is down.
+  uptime-kuma:
+    <<: *common
+    image: louislam/uptime-kuma:2
+    container_name: uptime-kuma
+    volumes:
+      - kuma-data:/app/data
+    networks: [proxy]
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.kuma.loadbalancer.server.port: "3001"
+      traefik.http.routers.kuma-pub.rule: Host(`status.${DOMAIN}`)
+      traefik.http.routers.kuma-pub.entrypoints: web
+      traefik.http.routers.kuma-pub.middlewares: secured-public@file
+      traefik.http.routers.kuma-ts.rule: Host(`status.lab.${DOMAIN}`)
+      traefik.http.routers.kuma-ts.entrypoints: tailnet
+      traefik.http.routers.kuma-ts.middlewares: secured-tailnet@file
+
+  ntfy:
+    <<: *common
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    command: serve
+    environment:
+      TZ: ${TZ}
+      NTFY_BASE_URL: https://ntfy.${DOMAIN}
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_AUTH_FILE: /etc/ntfy/auth.db
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all   # every client needs a user/token
+    volumes:
+      - ntfy-cache:/var/cache/ntfy
+      - ntfy-etc:/etc/ntfy
+    networks: [proxy]
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.ntfy.loadbalancer.server.port: "80"
+      # Phone app must reach it without SSO: ntfy's own token auth + CrowdSec.
+      traefik.http.routers.ntfy-pub.rule: Host(`ntfy.${DOMAIN}`)
+      traefik.http.routers.ntfy-pub.entrypoints: web
+      traefik.http.routers.ntfy-pub.middlewares: crowdsec@file,security-headers@file
+      traefik.http.routers.ntfy-ts.rule: Host(`ntfy.lab.${DOMAIN}`)
+      traefik.http.routers.ntfy-ts.entrypoints: tailnet
+      traefik.http.routers.ntfy-ts.middlewares: tailnet-only@file
+
+  # ─────────────────────────── Unified view ───────────────────────────
+
+  socket-proxy:
+    <<: *common
+    image: ghcr.io/tecnativa/docker-socket-proxy:latest
+    container_name: socket-proxy
+    environment:
+      CONTAINERS: 1
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [internal]
+
+  homepage:
+    <<: *common
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    env_file: homepage.env              # only HOMEPAGE_VAR_* widget secrets, nothing else
+    environment:
+      TZ: ${TZ}
+      HOMEPAGE_ALLOWED_HOSTS: dash.${DOMAIN},dash.lab.${DOMAIN}
+    volumes:
+      - ./homepage:/app/config
+    networks: [proxy, internal]
+    labels:
+      traefik.enable: "true"
+      traefik.http.services.homepage.loadbalancer.server.port: "3000"
+      traefik.http.routers.homepage-pub.rule: Host(`dash.${DOMAIN}`)
+      traefik.http.routers.homepage-pub.entrypoints: web
+      traefik.http.routers.homepage-pub.middlewares: secured-public@file
+      traefik.http.routers.homepage-ts.rule: Host(`dash.lab.${DOMAIN}`)
+      traefik.http.routers.homepage-ts.entrypoints: tailnet
+      traefik.http.routers.homepage-ts.middlewares: secured-tailnet@file

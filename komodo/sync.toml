@@ -1,0 +1,44 @@
+# Komodo Resource Sync — declares stacks (and what server runs them) from Git.
+# In Komodo: Syncs > New > repo jaime7981/homelab-ops, branch main, resource path komodo/sync.toml.
+# Komodo shows a diff before applying; nothing changes until you click "Execute".
+#
+# Servers are created when each machine's periphery agent first connects
+# (docs/add-machine.md); the names below must match NODE_NAME on that machine.
+#
+# Field names follow Komodo's TOML export format. If a field is rejected after an upgrade,
+# configure one stack in the UI, use "Export TOML" on it, and copy the field names from there.
+
+# ── media-pc ────────────────────────────────────────────────
+
+[[stack]]
+name = "plex"
+tags = ["media-pc"]
+[stack.config]
+server = "media-pc"
+git_provider = "github.com"
+repo = "jaime7981/homelab-ops"
+branch = "main"
+run_directory = "stacks/media-pc/plex"
+webhook_enabled = true
+environment = """
+PLEX_CLAIM=
+"""
+
+# ── Copy this block for each new app ────────────────────────
+#
+# [[stack]]
+# name = "website"
+# tags = ["web-pc", "public"]
+# [stack.config]
+# server = "web-pc"
+# git_provider = "github.com"
+# repo = "jaime7981/homelab-ops"
+# branch = "main"
+# run_directory = "stacks/web-pc/website"
+# webhook_enabled = true
+# environment = """
+# TUNNEL_TOKEN=[[WEBSITE_TUNNEL_TOKEN]]
+# """
+#
+# One-click fleet actions (e.g. "pull and redeploy everything tagged media") are
+# Procedures. Build them in the UI first, then Export TOML and paste them here.

@@ -1,0 +1,24 @@
+# Off-site watcher — run on a small VPS (or free-tier VM) OUTSIDE your house.
+# If the house loses power or internet, this is the only thing that can still alert you.
+#
+# Join the VPS to Tailscale, then:
+#   docker compose up -d
+# and open http://<vps-tailscale-name>:3001 over Tailscale (bound to the Tailscale IP only).
+#
+# Once this runs, remove the uptime-kuma service from core/compose.yaml (or keep both:
+# core checks internal services, off-site checks the public URLs).
+
+name: offsite
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:2
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - ${TAILSCALE_IP:?set TAILSCALE_IP of the VPS}:3001:3001
+    volumes:
+      - kuma-data:/app/data
+
+volumes:
+  kuma-data:

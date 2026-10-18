@@ -1,0 +1,7 @@
+- Admin consoles:
+    - Cloudflare Zero Trust:
+        - href: https://one.dash.cloudflare.com
+    - Tailscale:
+        - href: https://login.tailscale.com/admin/machines
+    - GitHub repo:
+        - href: https://github.com/jaime7981/homelab-ops

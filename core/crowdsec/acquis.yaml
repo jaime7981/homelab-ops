@@ -1,0 +1,10 @@
+# Log sources CrowdSec parses on the core host.
+filenames:
+  - /var/log/traefik/access.log
+labels:
+  type: traefik
+---
+filenames:
+  - /var/log/auth.log
+labels:
+  type: syslog

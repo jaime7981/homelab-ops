@@ -1,0 +1,18 @@
+# Second IP layer for PUBLIC admin hostnames (*.DOMAIN).
+# The primary country/IP filter is the Cloudflare Access policy (docs/access.md).
+# This one is enforced on your own hardware, in case an Access policy is misconfigured.
+#
+# Ships wide open. Replace with your home / office / mobile ranges, e.g.:
+#   - 190.x.x.0/24      # home ISP (Santiago)
+#   - 200.x.x.x/32      # office
+# Traefik reloads this file automatically on save.
+
+http:
+  middlewares:
+    public-allowlist:
+      ipAllowList:
+        sourceRange:
+          - 0.0.0.0/0
+          - ::/0
+        ipStrategy:
+          depth: 1        # client IP = last X-Forwarded-For entry, set by cloudflared

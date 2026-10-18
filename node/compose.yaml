@@ -1,0 +1,72 @@
+# Agents that run on EVERY machine (including the core host).
+# They only make outbound connections to the core over Tailscale — no ports to open.
+#
+#   docker compose --env-file .env up -d
+#
+# See docs/add-machine.md.
+
+name: node-agents
+
+volumes:
+  periphery-keys:
+  beszel-agent-data:
+  crowdsec-agent-db:
+  crowdsec-agent-config:
+
+services:
+
+  # Komodo agent: lets Komodo deploy stacks, read logs, open a shell, run updates.
+  komodo-periphery:
+    image: ghcr.io/moghtech/komodo-periphery:2
+    container_name: komodo-periphery
+    init: true
+    restart: unless-stopped
+    labels:
+      komodo.skip: ""                     # never stopped by "stop all containers"
+    environment:
+      TZ: ${TZ}
+      PERIPHERY_CORE_ADDRESS: ws://${CORE_HOST}:9120
+      PERIPHERY_CONNECT_AS: ${NODE_NAME}
+      PERIPHERY_ONBOARDING_KEY: ${KOMODO_ONBOARDING_KEY:-}
+      PERIPHERY_ROOT_DIRECTORY: /etc/komodo
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/proc
+      - /etc/komodo:/etc/komodo           # stacks are cloned/deployed under here
+      - periphery-keys:/config/keys
+
+  # Beszel agent: CPU / RAM / disk / network / temps / GPU / per-container stats.
+  beszel-agent:
+    image: henrygd/beszel-agent:latest
+    container_name: beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      LISTEN: 45876
+      HUB_URL: http://${CORE_HOST}:8090
+      KEY: ${BESZEL_KEY}
+      TOKEN: ${BESZEL_TOKEN}
+    volumes:
+      - beszel-agent-data:/var/lib/beszel-agent
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # extra disks: - /mnt/media/.beszel:/extra-filesystems/media:ro
+
+  # CrowdSec log processor: parses this machine's logs, reports to the core's Local API.
+  # Skip it on the core host (the core already runs the full CrowdSec engine).
+  crowdsec-agent:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec-agent
+    restart: unless-stopped
+    profiles: [crowdsec]
+    environment:
+      TZ: ${TZ}
+      DISABLE_LOCAL_API: "true"
+      LOCAL_API_URL: http://${CORE_HOST}:8081
+      AGENT_USERNAME: ${NODE_NAME}
+      AGENT_PASSWORD: ${CROWDSEC_AGENT_PASSWORD}
+      COLLECTIONS: crowdsecurity/linux crowdsecurity/sshd
+    volumes:
+      - ./crowdsec-acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - /var/log/auth.log:/var/log/auth.log:ro
+      - crowdsec-agent-db:/var/lib/crowdsec/data
+      - crowdsec-agent-config:/etc/crowdsec

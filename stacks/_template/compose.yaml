@@ -1,0 +1,36 @@
+# Template for a new app. Copy to stacks/<machine>/<app>/compose.yaml.
+# Komodo deploys it from Git on the machine named in komodo/sync.toml.
+#
+# Pick ONE exposure pattern and delete the others:
+#   A) Public website/API  -> Cloudflare Tunnel sidecar (no open ports, Access optional)
+#   B) Private, tailnet    -> publish on the machine's Tailscale IP only
+#   C) Internal only       -> no ports at all
+#
+# Secrets: never put values here. Reference variables (${VAR}) and set them in the
+# Komodo stack "Environment" box, which can pull Komodo secrets: VAR=[[SECRET_NAME]]
+
+services:
+  app:
+    image: ghcr.io/you/app:1.0.0          # pin versions; bump them in a commit
+    restart: unless-stopped
+    environment:
+      TZ: America/Santiago
+      DATABASE_URL: ${DATABASE_URL}
+    # B) private, tailnet only:
+    # ports:
+    #   - ${TAILSCALE_IP}:8080:8080
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # A) public: one tunnel per app; its public hostname is set in Cloudflare
+  #    Zero Trust > Networks > Tunnels > <tunnel> > Public hostnames -> http://app:8080
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on: [app]

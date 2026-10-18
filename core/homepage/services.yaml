@@ -1,0 +1,97 @@
+# The unified view. Docs: https://gethomepage.dev/configs/services/
+# Internal URLs (http://container:port) are used for widgets; href is what you click.
+# Edit the Servers / Websites groups to match your machines and apps (docs/dashboard.md).
+
+- Fleet:
+    - Komodo:
+        icon: komodo.png
+        href: https://komodo.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Deploy, logs, shell, updates
+        widget:
+          type: komodo
+          url: http://komodo-core:9120
+          key: "{{HOMEPAGE_VAR_KOMODO_KEY}}"
+          secret: "{{HOMEPAGE_VAR_KOMODO_SECRET}}"
+          showSummary: true
+    - Beszel:
+        icon: beszel.png
+        href: https://beszel.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Host metrics & alerts
+        widget:
+          type: beszel
+          url: http://beszel:8090
+          username: "{{HOMEPAGE_VAR_BESZEL_USER}}"
+          password: "{{HOMEPAGE_VAR_BESZEL_PASS}}"
+    - Uptime Kuma:
+        icon: uptime-kuma.png
+        href: https://status.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Websites & tunnels
+        widget:
+          type: uptimekuma
+          url: http://uptime-kuma:3001
+          slug: homelab              # create a status page with this slug
+
+- Security:
+    - authentik:
+        icon: authentik.png
+        href: https://auth.{{HOMEPAGE_VAR_DOMAIN}}/if/admin/
+        description: Users, MFA, login logs
+        widget:
+          type: authentik
+          url: http://authentik-server:9000
+          key: "{{HOMEPAGE_VAR_AUTHENTIK_TOKEN}}"
+          version: 2
+    - CrowdSec:
+        icon: crowdsec.png
+        href: https://app.crowdsec.net
+        description: Attacks blocked
+        widget:
+          type: crowdsec
+          url: http://crowdsec:8080
+          username: "{{HOMEPAGE_VAR_CROWDSEC_USER}}"
+          password: "{{HOMEPAGE_VAR_CROWDSEC_PASS}}"
+    - Traefik:
+        icon: traefik.png
+        href: https://traefik.lab.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Routers & middlewares (tailnet only)
+    - ntfy:
+        icon: ntfy.png
+        href: https://ntfy.{{HOMEPAGE_VAR_DOMAIN}}
+        description: Notifications
+
+# One entry per machine. Cockpit links only work over Tailscale.
+- Servers:
+    - core-pc:
+        icon: mdi-server
+        href: https://core-pc:9090        # Cockpit (Tailscale MagicDNS name)
+        description: Management core
+    - media-pc:
+        icon: mdi-server
+        href: https://media-pc:9090
+        description: Plex
+    - ai-pc:
+        icon: mdi-server
+        href: https://ai-pc:9090
+        description: llama.cpp + AI gateway
+
+# Public sites, checked from the dashboard itself (Uptime Kuma checks from outside).
+- Websites:
+    - Personal site:
+        icon: mdi-web
+        href: https://www.{{HOMEPAGE_VAR_DOMAIN}}
+        siteMonitor: https://www.{{HOMEPAGE_VAR_DOMAIN}}
+    - Property admin:
+        icon: mdi-home-city
+        href: https://properties.{{HOMEPAGE_VAR_DOMAIN}}
+        siteMonitor: https://properties.{{HOMEPAGE_VAR_DOMAIN}}
+    - AI API:
+        icon: mdi-robot
+        href: https://ai.{{HOMEPAGE_VAR_DOMAIN}}
+        siteMonitor: https://ai.{{HOMEPAGE_VAR_DOMAIN}}/health
+    - Plex:
+        icon: plex.png
+        href: https://app.plex.tv
+        # widget:
+        #   type: plex
+        #   url: http://media-pc:32400
+        #   key: "{{HOMEPAGE_VAR_PLEX_TOKEN}}"

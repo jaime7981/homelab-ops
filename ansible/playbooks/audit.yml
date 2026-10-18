@@ -1,0 +1,44 @@
+# Security audit of every machine: Lynis host audit + Trivy scan of running images.
+#   ansible-playbook playbooks/audit.yml
+# Reports are copied to ./reports/<host>/ on the machine running Ansible (git-ignored).
+- name: Security audit
+  hosts: homelab
+  become: true
+  tasks:
+    - name: Lynis audit
+      ansible.builtin.command: lynis audit system --quick --no-colors --report-file /tmp/lynis-report.dat
+      changed_when: false
+
+    - name: Lynis hardening index
+      ansible.builtin.shell: grep -E '^hardening_index=' /tmp/lynis-report.dat | cut -d= -f2
+      register: hardening
+      changed_when: false
+
+    - name: Lynis warnings
+      ansible.builtin.shell: grep -E '^warning\[\]=' /tmp/lynis-report.dat | cut -d= -f2 || true
+      register: warnings
+      changed_when: false
+
+    - name: Fetch report
+      ansible.builtin.fetch:
+        src: /tmp/lynis-report.dat
+        dest: "reports/{{ inventory_hostname }}/lynis-report.dat"
+        flat: true
+
+    - name: Trivy scan of running images
+      ansible.builtin.shell: |
+        command -v trivy >/dev/null || exit 0
+        for img in $(docker ps --format '{{ "{{" }}.Image{{ "}}" }}' | sort -u); do
+          n=$(trivy image --quiet --scanners vuln --severity HIGH,CRITICAL --format json "$img" \
+              | jq '[.Results[]?.Vulnerabilities[]?] | length')
+          echo "$n $img"
+        done | sort -rn
+      register: trivy
+      changed_when: false
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "Hardening index: {{ hardening.stdout }}"
+          - "Warnings: {{ warnings.stdout_lines }}"
+          - "Images (HIGH/CRITICAL count): {{ trivy.stdout_lines }}"

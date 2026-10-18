@@ -1,0 +1,20 @@
+# Plex on media-pc. Host networking so LAN discovery (DLNA/GDM) works.
+# Remote access: Plex's own relay/port forward, or over Tailscale.
+services:
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: America/Santiago
+      VERSION: docker
+      PLEX_CLAIM: ${PLEX_CLAIM:-}       # only for the first start: https://plex.tv/claim
+    volumes:
+      - /srv/plex/config:/config
+      - /mnt/media:/media:ro
+    # GPU transcoding (Intel/AMD): uncomment
+    # devices:
+    #   - /dev/dri:/dev/dri

@@ -1,0 +1,72 @@
+# Middlewares referenced from docker labels as <name>@file.
+# Traefik renders this file as a Go template, so {{ env "X" }} reads the traefik container env.
+
+http:
+  middlewares:
+
+    # ── Building blocks ──────────────────────────────────────────────
+
+    # Single sign-on via the authentik embedded outpost (forward auth).
+    authentik:
+      forwardAuth:
+        address: http://authentik-server:9000/outpost.goauthentik.io/auth/traefik
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-authentik-username
+          - X-authentik-groups
+          - X-authentik-email
+          - X-authentik-name
+          - X-authentik-uid
+          - X-authentik-jwt
+
+    # CrowdSec bouncer: blocks IPs flagged by the local engine + community blocklist.
+    crowdsec:
+      plugin:
+        crowdsec:
+          enabled: true
+          crowdsecMode: live
+          crowdsecLapiScheme: http
+          crowdsecLapiHost: crowdsec:8080
+          crowdsecLapiKey: '{{ env "CROWDSEC_BOUNCER_KEY" }}'
+          # Real client IP comes from Cloudflare; only trust it from the docker network.
+          forwardedHeadersCustomName: CF-Connecting-IP
+          forwardedHeadersTrustedIPs:
+            - 172.30.0.0/16
+          clientTrustedIPs:
+            - 100.64.0.0/10   # never ban your own tailnet
+
+    # Only Tailscale addresses (IPv4 CGNAT range + Tailscale IPv6 ULA).
+    tailnet-only:
+      ipAllowList:
+        sourceRange:
+          - 100.64.0.0/10
+          - fd7a:115c:a1e0::/48
+
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: same-origin
+        customFrameOptionsValue: SAMEORIGIN
+
+    # ── Chains used by the routers ──────────────────────────────────
+
+    # Public admin hostnames (*.DOMAIN). Cloudflare Access already filtered
+    # identity / country / IP before the request reached the tunnel.
+    secured-public:
+      chain:
+        middlewares:
+          - crowdsec
+          - public-allowlist     # see allowlist.yml (second IP layer, optional)
+          - authentik
+          - security-headers
+
+    # Tailnet hostnames (*.lab.DOMAIN).
+    secured-tailnet:
+      chain:
+        middlewares:
+          - tailnet-only
+          - authentik
+          - security-headers
