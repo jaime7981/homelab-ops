@@ -20,6 +20,9 @@ You can reach the dashboard **either** way:
 
 ### DNS & tunnel
 
+Domain: **`ailabs.cl`**. Existing app subdomains and their tunnels stay exactly as they are; this adds a separate `mgmt` tunnel only for the admin tools.
+Before creating hostnames, check none of `dash`, `komodo`, `beszel`, `status`, `auth`, `ntfy` or `lab` are already taken in DNS. If one is, rename it in the Traefik labels (`core/compose.yaml`) and in `homepage/services.yaml`.
+
 1. Zero Trust → Networks → Tunnels → **Create tunnel** `mgmt` (type cloudflared). Copy the token into `core/.env` as `CLOUDFLARE_TUNNEL_TOKEN`.
 2. In the tunnel, add **Public hostnames**, all pointing to `http://traefik:8080`:
    `dash`, `komodo`, `beszel`, `status`, `auth`, `ntfy` (each `.DOMAIN`).

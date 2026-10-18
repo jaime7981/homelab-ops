@@ -83,6 +83,8 @@ Then follow [docs/deploy.md](docs/deploy.md) from step 4 onwards.
 
 ## Hostnames at a glance
 
+Domain: `ailabs.cl` (DOMAIN below).
+
 | Service | Public (Cloudflare Access) | Tailnet only |
 |---|---|---|
 | Dashboard | `dash.DOMAIN` | `dash.lab.DOMAIN` |
