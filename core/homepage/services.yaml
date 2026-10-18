@@ -76,10 +76,10 @@
 
 # Public sites, checked from the dashboard itself (Uptime Kuma checks from outside).
 - Websites:
-    - Personal site:
+    - Main site:            # ailabs.cl itself: only monitored, nothing here is served on the apex
         icon: mdi-web
-        href: https://www.{{HOMEPAGE_VAR_DOMAIN}}
-        siteMonitor: https://www.{{HOMEPAGE_VAR_DOMAIN}}
+        href: https://{{HOMEPAGE_VAR_DOMAIN}}
+        siteMonitor: https://{{HOMEPAGE_VAR_DOMAIN}}
     - Property admin:
         icon: mdi-home-city
         href: https://properties.{{HOMEPAGE_VAR_DOMAIN}}
