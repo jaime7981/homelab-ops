@@ -1,0 +1,85 @@
+# OPTIONAL: second, VPN-only way into the admin tools (*.lab.DOMAIN over Tailscale).
+# Not needed for the tunnel-only setup. Useful as a back door if Cloudflare Access or
+# the tunnel is down or misconfigured.
+#
+# Enable:   add to core/.env  ->  COMPOSE_FILE=compose.yaml:compose.tailnet.yaml
+#           set CF_DNS_API_TOKEN and ACME_EMAIL in .env
+#           Cloudflare DNS:  A  *.lab  -> <core Tailscale IP>, DNS only (grey cloud)
+# Then:     docker compose up -d
+#
+# Compose merges labels/environment/ports from this file into compose.yaml,
+# but replaces `command`, so the full Traefik command is repeated here.
+
+services:
+  traefik:
+    command:
+      - --api.dashboard=true
+      - --log.level=INFO
+      - --accesslog=true
+      - --accesslog.filepath=/var/log/traefik/access.log
+      - --accesslog.format=json
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=proxy
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:8080
+      - --entrypoints.web.forwardedheaders.trustedips=172.30.0.0/16
+      - --experimental.plugins.crowdsec.modulename=github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
+      - --experimental.plugins.crowdsec.version=v1.4.4
+      # tailnet entrypoint, TLS via Let's Encrypt DNS challenge on Cloudflare
+      - --entrypoints.tailnet.address=:443
+      - --entrypoints.tailnet.http.tls=true
+      - --entrypoints.tailnet.http.tls.certresolver=cf
+      - --entrypoints.tailnet.http.tls.domains[0].main=lab.${DOMAIN}
+      - --entrypoints.tailnet.http.tls.domains[0].sans=*.lab.${DOMAIN}
+      - --certificatesresolvers.cf.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.cf.acme.storage=/certs/acme.json
+      - --certificatesresolvers.cf.acme.dnschallenge.provider=cloudflare
+      - --certificatesresolvers.cf.acme.dnschallenge.resolvers=1.1.1.1:53
+    environment:
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:?set CF_DNS_API_TOKEN for the tailnet path}
+    ports:
+      - ${TAILSCALE_IP}:443:443        # only reachable over Tailscale
+    labels:
+      traefik.http.routers.traefik-ts.rule: Host(`traefik.lab.${DOMAIN}`)
+      traefik.http.routers.traefik-ts.entrypoints: tailnet
+      traefik.http.routers.traefik-ts.service: api@internal
+      traefik.http.routers.traefik-ts.middlewares: secured-tailnet@file
+
+  authentik-server:
+    labels:
+      traefik.http.routers.authentik-ts.rule: Host(`auth.lab.${DOMAIN}`)
+      traefik.http.routers.authentik-ts.entrypoints: tailnet
+      traefik.http.routers.authentik-ts.middlewares: tailnet-only@file,security-headers@file
+      traefik.http.routers.authentik-outpost.entrypoints: web,tailnet
+
+  komodo-core:
+    labels:
+      traefik.http.routers.komodo-ts.rule: Host(`komodo.lab.${DOMAIN}`)
+      traefik.http.routers.komodo-ts.entrypoints: tailnet
+      traefik.http.routers.komodo-ts.middlewares: secured-tailnet@file
+
+  beszel:
+    labels:
+      traefik.http.routers.beszel-ts.rule: Host(`beszel.lab.${DOMAIN}`)
+      traefik.http.routers.beszel-ts.entrypoints: tailnet
+      traefik.http.routers.beszel-ts.middlewares: secured-tailnet@file
+
+  uptime-kuma:
+    labels:
+      traefik.http.routers.kuma-ts.rule: Host(`status.lab.${DOMAIN}`)
+      traefik.http.routers.kuma-ts.entrypoints: tailnet
+      traefik.http.routers.kuma-ts.middlewares: secured-tailnet@file
+
+  ntfy:
+    labels:
+      traefik.http.routers.ntfy-ts.rule: Host(`ntfy.lab.${DOMAIN}`)
+      traefik.http.routers.ntfy-ts.entrypoints: tailnet
+      traefik.http.routers.ntfy-ts.middlewares: tailnet-only@file
+
+  homepage:
+    labels:
+      traefik.http.routers.homepage-ts.rule: Host(`dash.lab.${DOMAIN}`)
+      traefik.http.routers.homepage-ts.entrypoints: tailnet
+      traefik.http.routers.homepage-ts.middlewares: secured-tailnet@file

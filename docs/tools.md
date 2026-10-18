@@ -20,7 +20,7 @@ WireGuard mesh VPN between your devices and every PC. Also provides **Tailscale 
 - Docs: https://tailscale.com/kb/1193/tailscale-ssh
 
 ### Traefik v3
-Reverse proxy for every management UI. Routes by hostname, applies middleware chains (CrowdSec, IP allowlist, SSO, headers), and gets TLS certs for `*.lab.DOMAIN`.
+Reverse proxy for every management UI. Routes by hostname, applies middleware chains (CrowdSec, IP allowlist, SSO, headers), and (optionally) TLS certs for the VPN-only `*.lab.DOMAIN` path.
 - `core/compose.yaml` (static config as flags), `core/traefik/dynamic/*.yml` (middlewares, allowlist).
 
 ### authentik

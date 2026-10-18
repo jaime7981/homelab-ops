@@ -63,7 +63,7 @@ POST   /admin/users               create user, return key
 DELETE /admin/users/{id}          revoke
 ```
 
-Expose `/admin/*` **only** on the tailnet path or behind Traefik + authentik (`secured-*` middlewares), never through the public AI tunnel. Trust the `X-authentik-username` header for who's calling.
+Expose `/admin/*` **only** over Tailscale or behind Traefik + authentik (`secured-*` middlewares), never through the public AI tunnel. Trust the `X-authentik-username` header for who's calling.
 
 A future custom portal ([dashboard.md](dashboard.md#later-a-custom-portal)) can then show models and users next to everything else.
 

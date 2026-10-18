@@ -3,16 +3,14 @@
 One place to run, watch and secure every machine and app in the homelab:
 Plex, the local AI API (llama.cpp), the personal website, the family property admin app, and whatever comes next.
 
-**One login, one dashboard, two ways in** (Cloudflare Access from anywhere, or Tailscale VPN), with alerts on your phone.
+**One login, one dashboard**, reachable only through a Cloudflare Tunnel + Access (no ports open on the house network), with alerts on your phone. Tailscale is used for SSH and agent traffic.
 
 ```mermaid
 flowchart TB
   subgraph Access["Access layer"]
     CFA["Cloudflare Access<br/>SSO · country · IP rules"]
-    TS["Tailscale<br/>VPN · SSH keys · ACLs"]
   end
-  CFA -->|"*.domain via tunnel"| TR
-  TS  -->|"*.lab.domain"| TR
+  CFA -->|"mgmt tunnel"| TR
   TR["Traefik + authentik<br/>reverse proxy · single login · MFA · CrowdSec"]
   TR --> HP["Homepage<br/>unified dashboard"]
   HP --> KO["Komodo<br/>deploy · logs · shell"]
@@ -20,6 +18,7 @@ flowchart TB
   HP --> UK["Uptime Kuma<br/>sites & tunnels"]
   HP --> CS["CrowdSec<br/>attacks blocked"]
   KO & BE & CS --> AG["Agents on every PC<br/>Komodo periphery · Beszel agent · CrowdSec"]
+  TS["Tailscale<br/>SSH · agent traffic"] -.-> AG
   AG --> NT["ntfy / Telegram alerts"]
 ```
 
@@ -83,15 +82,13 @@ Then follow [docs/deploy.md](docs/deploy.md) from step 4 onwards.
 
 ## Hostnames at a glance
 
-Domain: `ailabs.cl` (DOMAIN below).
-
-| Service | Public (Cloudflare Access) | Tailnet only |
-|---|---|---|
-| Dashboard | `dash.DOMAIN` | `dash.lab.DOMAIN` |
-| Komodo | `komodo.DOMAIN` | `komodo.lab.DOMAIN` |
-| Beszel | `beszel.DOMAIN` | `beszel.lab.DOMAIN` |
-| Uptime Kuma | `status.DOMAIN` | `status.lab.DOMAIN` |
-| authentik | `auth.DOMAIN` | `auth.lab.DOMAIN` |
-| ntfy | `ntfy.DOMAIN` | `ntfy.lab.DOMAIN` |
-| Traefik | — | `traefik.lab.DOMAIN` |
-| Cockpit (per PC) | — | `https://<machine>:9090` |
+| Service | URL (tunnel + Cloudflare Access) |
+|---|---|
+| Dashboard | `https://dash.ailabs.cl` |
+| Komodo | `https://komodo.ailabs.cl` |
+| Beszel | `https://beszel.ailabs.cl` |
+| Uptime Kuma | `https://status.ailabs.cl` |
+| authentik | `https://auth.ailabs.cl` |
+| ntfy | `https://ntfy.ailabs.cl` (ntfy tokens, no Access) |
+| Traefik | `https://traefik.ailabs.cl` |
+| Cockpit (per machine) | `https://<machine>:9090` over Tailscale |

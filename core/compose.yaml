@@ -3,9 +3,10 @@
 #
 #   docker compose --env-file .env up -d
 #
-# Two ways in (see docs/access.md):
-#   public  : *.${DOMAIN}      -> Cloudflare Access -> cloudflared -> traefik:8080 (entrypoint "web")
-#   tailnet : *.lab.${DOMAIN}  -> Tailscale VPN     -> traefik:443 on the Tailscale IP (entrypoint "tailnet")
+# Access is tunnel-only (see docs/access.md):
+#   *.${DOMAIN} -> Cloudflare Access -> cloudflared (this file) -> traefik:8080 -> app
+# Nothing listens on the LAN or internet. Agent ports bind to the Tailscale IP only.
+# Optional second, VPN-only path (*.lab.${DOMAIN}): add compose.tailnet.yaml (see that file).
 
 name: mgmt
 
@@ -60,37 +61,24 @@ services:
       # entrypoint for traffic coming from cloudflared (never published on the host)
       - --entrypoints.web.address=:8080
       - --entrypoints.web.forwardedheaders.trustedips=172.30.0.0/16
-      # entrypoint for tailnet-only traffic, TLS via Cloudflare DNS challenge
-      - --entrypoints.tailnet.address=:443
-      - --entrypoints.tailnet.http.tls=true
-      - --entrypoints.tailnet.http.tls.certresolver=cf
-      - --entrypoints.tailnet.http.tls.domains[0].main=lab.${DOMAIN}
-      - --entrypoints.tailnet.http.tls.domains[0].sans=*.lab.${DOMAIN}
-      - --certificatesresolvers.cf.acme.email=${ACME_EMAIL}
-      - --certificatesresolvers.cf.acme.storage=/certs/acme.json
-      - --certificatesresolvers.cf.acme.dnschallenge.provider=cloudflare
-      - --certificatesresolvers.cf.acme.dnschallenge.resolvers=1.1.1.1:53
       - --experimental.plugins.crowdsec.modulename=github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
       - --experimental.plugins.crowdsec.version=v1.4.4
     environment:
       TZ: ${TZ}
       DOMAIN: ${DOMAIN}
-      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
       CROWDSEC_BOUNCER_KEY: ${CROWDSEC_BOUNCER_KEY}
-    ports:
-      - ${TAILSCALE_IP}:443:443        # only reachable over Tailscale
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/logs:/var/log/traefik
-      - traefik-certs:/certs
+      - traefik-certs:/certs              # used only by compose.tailnet.yaml
     networks: [proxy]
     labels:
       traefik.enable: "true"
-      traefik.http.routers.traefik.rule: Host(`traefik.lab.${DOMAIN}`)
-      traefik.http.routers.traefik.entrypoints: tailnet
+      traefik.http.routers.traefik.rule: Host(`traefik.${DOMAIN}`)
+      traefik.http.routers.traefik.entrypoints: web
       traefik.http.routers.traefik.service: api@internal
-      traefik.http.routers.traefik.middlewares: secured-tailnet@file
+      traefik.http.routers.traefik.middlewares: secured-public@file
 
   cloudflared:
     <<: *common
@@ -164,16 +152,13 @@ services:
     labels:
       traefik.enable: "true"
       traefik.http.services.authentik.loadbalancer.server.port: "9000"
-      # Login portal. NOT behind Cloudflare Access (OIDC clients must reach it); protected by CrowdSec + MFA.
+      # Login portal. Behind Cloudflare Access except the OIDC endpoints (docs/access.md).
       traefik.http.routers.authentik-pub.rule: Host(`auth.${DOMAIN}`)
       traefik.http.routers.authentik-pub.entrypoints: web
       traefik.http.routers.authentik-pub.middlewares: crowdsec@file,security-headers@file
-      traefik.http.routers.authentik-ts.rule: Host(`auth.lab.${DOMAIN}`)
-      traefik.http.routers.authentik-ts.entrypoints: tailnet
-      traefik.http.routers.authentik-ts.middlewares: tailnet-only@file,security-headers@file
       # Embedded outpost callback path, on every host name (needed for forward-auth)
       traefik.http.routers.authentik-outpost.rule: PathPrefix(`/outpost.goauthentik.io/`)
-      traefik.http.routers.authentik-outpost.entrypoints: web,tailnet
+      traefik.http.routers.authentik-outpost.entrypoints: web
       traefik.http.routers.authentik-outpost.priority: "1000"
 
   authentik-worker:
@@ -256,9 +241,6 @@ services:
       traefik.http.routers.komodo-pub.rule: Host(`komodo.${DOMAIN}`)
       traefik.http.routers.komodo-pub.entrypoints: web
       traefik.http.routers.komodo-pub.middlewares: secured-public@file
-      traefik.http.routers.komodo-ts.rule: Host(`komodo.lab.${DOMAIN}`)
-      traefik.http.routers.komodo-ts.entrypoints: tailnet
-      traefik.http.routers.komodo-ts.middlewares: secured-tailnet@file
       # GitHub push webhooks -> auto deploy. Authenticated by KOMODO_WEBHOOK_SECRET, not SSO.
       traefik.http.routers.komodo-hook.rule: Host(`komodo.${DOMAIN}`) && PathPrefix(`/listener`)
       traefik.http.routers.komodo-hook.entrypoints: web
@@ -285,9 +267,6 @@ services:
       traefik.http.routers.beszel-pub.rule: Host(`beszel.${DOMAIN}`)
       traefik.http.routers.beszel-pub.entrypoints: web
       traefik.http.routers.beszel-pub.middlewares: secured-public@file
-      traefik.http.routers.beszel-ts.rule: Host(`beszel.lab.${DOMAIN}`)
-      traefik.http.routers.beszel-ts.entrypoints: tailnet
-      traefik.http.routers.beszel-ts.middlewares: secured-tailnet@file
 
   # Move to ../offsite once you have a VPS, so it can alert when the house is down.
   uptime-kuma:
@@ -303,9 +282,6 @@ services:
       traefik.http.routers.kuma-pub.rule: Host(`status.${DOMAIN}`)
       traefik.http.routers.kuma-pub.entrypoints: web
       traefik.http.routers.kuma-pub.middlewares: secured-public@file
-      traefik.http.routers.kuma-ts.rule: Host(`status.lab.${DOMAIN}`)
-      traefik.http.routers.kuma-ts.entrypoints: tailnet
-      traefik.http.routers.kuma-ts.middlewares: secured-tailnet@file
 
   ntfy:
     <<: *common
@@ -330,9 +306,6 @@ services:
       traefik.http.routers.ntfy-pub.rule: Host(`ntfy.${DOMAIN}`)
       traefik.http.routers.ntfy-pub.entrypoints: web
       traefik.http.routers.ntfy-pub.middlewares: crowdsec@file,security-headers@file
-      traefik.http.routers.ntfy-ts.rule: Host(`ntfy.lab.${DOMAIN}`)
-      traefik.http.routers.ntfy-ts.entrypoints: tailnet
-      traefik.http.routers.ntfy-ts.middlewares: tailnet-only@file
 
   # ─────────────────────────── Unified view ───────────────────────────
 
@@ -364,6 +337,3 @@ services:
       traefik.http.routers.homepage-pub.rule: Host(`dash.${DOMAIN}`)
       traefik.http.routers.homepage-pub.entrypoints: web
       traefik.http.routers.homepage-pub.middlewares: secured-public@file
-      traefik.http.routers.homepage-ts.rule: Host(`dash.lab.${DOMAIN}`)
-      traefik.http.routers.homepage-ts.entrypoints: tailnet
-      traefik.http.routers.homepage-ts.middlewares: secured-tailnet@file

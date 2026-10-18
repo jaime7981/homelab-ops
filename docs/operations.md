@@ -150,12 +150,12 @@ Test a restore once. A backup you haven't restored is a hope, not a backup.
 `docker system df` → `docker image prune -af --filter until=168h` → check `/srv` and media disks → Traefik access log size.
 
 ### Locked out of the dashboard
-- Cloudflare Access denied → use the tailnet path `dash.lab.DOMAIN`, then fix the policy (common cause: travelling, country rule).
-- authentik broken → Komodo local admin still works at `komodo.lab.DOMAIN` (bypass forward-auth temporarily by removing the middleware label and `docker compose up -d komodo-core`), or `ssh` to the core and `docker compose logs authentik-server`.
+- Cloudflare Access denied (common cause: travelling, country rule) → fix the policy in Zero Trust from your phone. Meanwhile, from a tailnet device, Komodo and Beszel answer directly on `http://raspi:9120` and `http://raspi:8090`.
+- authentik broken → Komodo's local admin still works at `http://raspi:9120` over Tailscale (no forward-auth on that port). Then `ssh` to the Pi and `docker compose logs authentik-server`.
 - Tailscale broken too → LAN SSH with key, or console.
 
 ### Cloudflare is down
-Public sites are down (nothing to do but wait). Admin access works over Tailscale (`*.lab.DOMAIN`). The certificate is cached; only renewal needs Cloudflare's DNS API.
+Public sites and admin hostnames are down (nothing to do but wait). Over Tailscale you still have SSH everywhere, Komodo at `http://raspi:9120` and Beszel at `http://raspi:8090`.
 
 ### Suspected compromise
 1. Cut public exposure: Cloudflare → disable the affected tunnel(s).

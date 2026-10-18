@@ -3,8 +3,8 @@
 ## Principles
 
 1. **Use existing tools; write code only for the gaps.** Monitoring, auth, deploy and alerting are solved problems. Custom code is limited to the llama.cpp admin layer and, later, an optional custom portal.
-2. **Nothing admin-related is open to the internet.** No port forwarding on the router. Admin traffic arrives through a Cloudflare Tunnel (outbound connection) or over Tailscale.
-3. **Defense in depth on the public path.** Cloudflare Access (identity + country + IP) → CrowdSec → Traefik IP allowlist → authentik SSO/MFA. Any single layer failing doesn't expose the tools.
+2. **Nothing admin-related is open to the internet.** No port forwarding on the router. Admin traffic arrives only through a Cloudflare Tunnel (outbound connection); Tailscale is for SSH and agents.
+3. **Defense in depth on the tunnel path.** Cloudflare Access (identity + country + IP) → CrowdSec → Traefik IP allowlist → authentik SSO/MFA. Any single layer failing doesn't expose the tools.
 4. **Agents dial out.** Komodo periphery, Beszel agent and CrowdSec agents connect *to* the core over Tailscale. New machines don't need inbound ports.
 5. **Git is the source of truth** for app definitions (`stacks/`). Secrets live in Komodo / `.env` files, never in Git.
 
@@ -40,31 +40,21 @@
 
 The core can also run apps. It's just a machine with extra services.
 
-## Two entry paths
-
-### Public: `*.DOMAIN`
+## Entry path: Cloudflare Tunnel only
 
 ```
 Browser ──HTTPS──► Cloudflare edge ──► Cloudflare Access policy
-                                         (email OTP / Google / authentik,
-                                          allowed countries, allowed IPs)
-                    ──► tunnel ──► cloudflared (core) ──HTTP──► Traefik "web" :8080
+                                         (email OTP / authentik, allowed countries, allowed IPs)
+                    ──► mgmt tunnel ──► cloudflared (core compose) ──HTTP──► Traefik "web" :8080
                     ──► crowdsec ─► public-allowlist ─► authentik ─► app
 ```
 
-- TLS is terminated at Cloudflare. Inside the host, cloudflared → Traefik is plain HTTP on the private `proxy` Docker network, never published on the host.
-- The real client IP arrives as `CF-Connecting-IP` / `X-Forwarded-For`. Traefik trusts those headers only from `172.30.0.0/16` (the `proxy` network).
-
-### Tailnet: `*.lab.DOMAIN`
-
-```
-Device on Tailscale ──WireGuard──► core 100.x.y.z:443 ──► Traefik "tailnet"
-                    ──► tailnet-only (100.64.0.0/10) ─► authentik ─► app
-```
-
-- `*.lab.DOMAIN` is a **DNS-only** Cloudflare record pointing at the core's Tailscale IP (`100.x.y.z`). Anyone can resolve it, but only tailnet devices can reach it.
-- TLS certificate: Let's Encrypt wildcard via Cloudflare DNS challenge (no inbound port needed).
-- This path keeps working if Cloudflare is down or misconfigured. It's the admin back door.
+- Same pattern as the apps: `cloudflared` runs inside the compose project. The host publishes no web ports.
+- TLS terminates at Cloudflare. cloudflared → Traefik is plain HTTP on the private `proxy` Docker network.
+- Every hostname in the `mgmt` tunnel points at `traefik:8080`; pointing one at a container directly would skip CrowdSec and authentik.
+- The real client IP arrives as `CF-Connecting-IP` / `X-Forwarded-For`. Traefik trusts them only from `172.30.0.0/16` (the `proxy` network).
+- Tailscale carries SSH and agent traffic, not browser traffic. If the tunnel is down, Komodo (`:9120`) and Beszel (`:8090`) are still reachable on the core's Tailscale IP.
+- Optional: `core/compose.tailnet.yaml` adds a VPN-only browser path (`*.lab.DOMAIN` on the Tailscale IP, Let's Encrypt wildcard). Off by default.
 
 ## Ports
 
@@ -72,7 +62,7 @@ All admin ports bind to the **Tailscale IP only** (`${TAILSCALE_IP}:port`), so t
 
 | Port | Service | Who connects |
 |---|---|---|
-| 443 | Traefik `tailnet` entrypoint | You, over Tailscale |
+| 443 | Traefik `tailnet` entrypoint (only with `compose.tailnet.yaml`) | You, over Tailscale |
 | 9120 | Komodo core | Periphery agents (outbound WebSocket) |
 | 8090 | Beszel hub | Beszel agents |
 | 8081 | CrowdSec Local API | CrowdSec agents on other PCs |

@@ -1,6 +1,6 @@
 # The dashboard (Homepage)
 
-`https://dash.DOMAIN` (anywhere, via Cloudflare Access) or `https://dash.lab.DOMAIN` (tailnet).
+`https://dash.ailabs.cl`, from anywhere, through the `mgmt` tunnel and Cloudflare Access.
 
 ## Layout
 
