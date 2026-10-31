@@ -1,6 +1,6 @@
 # homelab-ops: notes for Claude
 
-Infrastructure-as-code for Jaime's homelab. The **Raspberry Pi (`raspi`) is the management core**: it runs `core/` (Traefik, authentik, Komodo, Beszel, Uptime Kuma, ntfy, Homepage, CrowdSec, cloudflared) plus `node/`. Every other server runs only `node/` (agents) and its apps from `stacks/`.
+Infrastructure-as-code for Jaime's homelab. The **Raspberry Pi (`jaime-pi`) is the management core**: it runs `core/` (Traefik, authentik, Komodo, Beszel, Uptime Kuma, ntfy, Homepage, CrowdSec, cloudflared) plus `node/`. Every other server runs only `node/` (agents) and its apps from `stacks/`.
 
 Reply to the user in Spanish. Keep code, comments and docs in English, matching the repo.
 
@@ -24,7 +24,7 @@ Guides by task: core install `docs/deploy.md` · new server `docs/add-machine.md
 2. **Nothing is published on the LAN or internet.** Admin/private ports bind to the Tailscale IP: `${TAILSCALE_IP}:PORT:PORT`. Public apps use a `cloudflared` sidecar with their own tunnel (pattern A in `stacks/_template`). Docker-published ports bypass ufw, so never use a bare `PORT:PORT`.
 3. Every hostname on the `mgmt` tunnel points to `http://traefik:8080`, never directly to a container (that would skip CrowdSec + authentik).
 4. Pin image versions in `stacks/` (`app:1.4.2`, not `latest`). Add a `healthcheck`. App data goes under `/srv/<app>/` on the host.
-5. Machine names = Tailscale MagicDNS names = `NODE_NAME` in `node/.env` = `server` in `sync.toml`. The core is `raspi`.
+5. Machine names = Tailscale MagicDNS names = `NODE_NAME` in `node/.env` = `server` in `sync.toml`. The core's name is `CORE_NAME` in `core/.env` (currently `jaime-pi`); if the core moves, change it there and in `node/.env`.
 6. Git is the source of truth: change files, commit, push. Komodo redeploys stacks on push (webhook). Don't `docker compose up` an app by hand on a server that Komodo manages, except to debug.
 7. Before running anything destructive (`down -v`, `volume rm`, `prune -a`, deleting a stack/server, changing firewall rules) explain what it does and wait for confirmation.
 

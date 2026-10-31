@@ -94,7 +94,7 @@ Your app domains share the `ailabs.cl` cookie domain, but authentik only checks 
 
 Tailscale is **not** used to browse the admin tools. It does two things:
 
-- **SSH** into every machine (`ssh jaime@raspi`), including when Cloudflare or authentik are down.
+- **SSH** into every machine (`ssh jaime@jaime-pi`), including when Cloudflare or authentik are down.
 - **Agent traffic**: Komodo periphery, Beszel and CrowdSec agents on other machines connect to the core on its Tailscale IP (ports 9120, 8090, 8081, bound only to that IP).
 
 ### ACL policy
@@ -133,10 +133,10 @@ Tag the Pi (core) `tag:core`, every other machine `tag:server`, and disable key 
 If the tunnel or Access is broken, forward a port over Tailscale SSH and use the tool locally:
 
 ```bash
-ssh -L 9120:localhost:9120 jaime@raspi     # then open http://localhost:9120 (Komodo, local admin login)
+ssh -L 9120:localhost:9120 jaime@jaime-pi     # then open http://localhost:9120 (Komodo, local admin login)
 ```
 
-Komodo, Beszel and CrowdSec already listen on the Pi's Tailscale IP, so `http://raspi:9120` and `http://raspi:8090` also work directly from a tailnet device.
+Komodo, Beszel and CrowdSec already listen on the Pi's Tailscale IP, so `http://jaime-pi:9120` and `http://jaime-pi:8090` also work directly from a tailnet device.
 
 ### Optional: VPN-only path (`*.lab.ailabs.cl`)
 

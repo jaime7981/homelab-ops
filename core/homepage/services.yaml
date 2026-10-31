@@ -61,10 +61,10 @@
 
 # One entry per machine. Cockpit links only work over Tailscale.
 - Servers:
-    - raspi:
+    - "{{HOMEPAGE_VAR_CORE_NAME}}":     # CORE_NAME in core/.env
         icon: mdi-server
-        href: https://raspi:9090          # Cockpit (Tailscale MagicDNS name)
-        description: Management core (Raspberry Pi)
+        href: https://{{HOMEPAGE_VAR_CORE_NAME}}:9090   # Cockpit (Tailscale MagicDNS name)
+        description: Management core
     - media-pc:
         icon: mdi-server
         href: https://media-pc:9090

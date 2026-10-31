@@ -328,6 +328,7 @@ services:
     environment:
       TZ: ${TZ}
       HOMEPAGE_ALLOWED_HOSTS: dash.${DOMAIN},dash.lab.${DOMAIN}
+      HOMEPAGE_VAR_CORE_NAME: ${CORE_NAME:?set CORE_NAME in .env}
     volumes:
       - ./homepage:/app/config
     networks: [proxy, internal]

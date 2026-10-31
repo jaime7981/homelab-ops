@@ -36,7 +36,7 @@ cd /opt/homelab-ops/core
 cp .env.example .env
 cp homepage.env.example homepage.env
 ../scripts/gen-secrets.sh          # paste output into .env
-nano .env                          # TAILSCALE_IP, CLOUDFLARE_TUNNEL_TOKEN, AUTHENTIK_TAG
+nano .env                          # CORE_NAME, TAILSCALE_IP, CLOUDFLARE_TUNNEL_TOKEN, AUTHENTIK_TAG
 mkdir -p traefik/logs authentik/{data,certs,custom-templates}
 docker compose up -d
 docker compose ps                  # all running / healthy after 1–2 min (slower on a Pi)
@@ -56,17 +56,17 @@ Then follow [access.md § authentik](access.md#2-authentik-single-login): MFA, f
 
 ```bash
 cd /opt/homelab-ops/node
-cp .env.example .env        # NODE_NAME=raspi, CORE_HOST=<Pi tailscale IP>
+cp .env.example .env        # NODE_NAME=<CORE_NAME> (jaime-pi), CORE_HOST=<Pi tailscale IP>
 ```
 
 - **Komodo:** `https://komodo.ailabs.cl`, log in with `KOMODO_INIT_ADMIN_*` → Settings → *Onboarding keys* → create → `KOMODO_ONBOARDING_KEY`.
-- **Beszel:** `https://beszel.ailabs.cl` → create the admin → *Add system* `raspi` → copy `KEY` and `TOKEN`.
+- **Beszel:** `https://beszel.ailabs.cl` → create the admin → *Add system* `jaime-pi` → copy `KEY` and `TOKEN`.
 
 ```bash
 docker compose up -d        # no crowdsec profile on the core (it runs the full engine)
 ```
 
-✅ `raspi` appears in Komodo (Servers) and Beszel.
+✅ `jaime-pi` appears in Komodo (Servers) and Beszel.
 
 ## 6. Komodo: Git, webhook, OIDC
 
@@ -98,7 +98,7 @@ Fill `homepage.env` (Komodo API key, Beszel user, authentik token, CrowdSec pass
 
 ## 11. Your existing Pi apps
 
-Move the two apps already on the Pi into `stacks/raspi/<app>/compose.yaml` (keep their own `cloudflared` sidecars) and register them in `komodo/sync.toml`. See [add-app.md](add-app.md#migrating-your-existing-apps).
+Move the two apps already on the Pi into `stacks/jaime-pi/<app>/compose.yaml` (keep their own `cloudflared` sidecars) and register them in `komodo/sync.toml`. See [add-app.md](add-app.md#migrating-your-existing-apps).
 
 ## Upgrading the core
 

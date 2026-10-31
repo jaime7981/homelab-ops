@@ -1,6 +1,6 @@
 # Top bar. Resources = the core host itself; per-machine metrics live in Beszel.
 - resources:
-    label: raspi
+    label: "{{HOMEPAGE_VAR_CORE_NAME}}"
     cpu: true
     memory: true
     disk: /

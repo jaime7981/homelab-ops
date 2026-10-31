@@ -34,7 +34,7 @@
 
 | Role | Example name | Runs |
 |---|---|---|
-| Management core | `raspi` | `core/` + `node/` (pick the most reliable, always-on machine) |
+| Management core | `jaime-pi` | `core/` + `node/` (pick the most reliable, always-on machine) |
 | App hosts | `media-pc`, `ai-pc`, … | `node/` + their stacks |
 | Off-site watcher (optional) | `vps` | `offsite/` |
 
