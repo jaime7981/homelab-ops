@@ -3,7 +3,8 @@
 # Run as a sudo-capable user:  curl ... | bash   or   ./scripts/bootstrap-node.sh
 #
 # What it does:
-#   1. Base packages, automatic security updates
+#   1. Base packages, automatic security updates, rsyslog (/var/log/auth.log for CrowdSec),
+#      ip_nonlocal_bind (containers can bind the Tailscale IP before tailscaled is up)
 #   2. Docker Engine + compose plugin
 #   3. Tailscale (you finish login interactively, with Tailscale SSH enabled)
 #   4. Cockpit web console (reachable only over Tailscale)
@@ -23,7 +24,25 @@ log() { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 log "Base packages"
 $SUDO apt-get update -y
 $SUDO apt-get install -y ca-certificates curl gnupg git ufw unattended-upgrades \
-  apt-listchanges needrestart lynis jq
+  apt-listchanges needrestart lynis jq rsyslog
+
+log "Classic auth log for CrowdSec"
+# Debian 12+ / Raspberry Pi OS Bookworm log only to journald. Without rsyslog there is no
+# /var/log/auth.log, and Docker would create an empty *directory* there when mounting it.
+if [[ -d /var/log/auth.log ]]; then
+  $SUDO rmdir /var/log/auth.log || echo "WARNING: /var/log/auth.log is a non-empty directory; remove it by hand"
+fi
+$SUDO systemctl enable rsyslog
+$SUDO systemctl restart rsyslog
+
+log "Allow binding the Tailscale IP before Tailscale is up"
+# Admin ports are published on the Tailscale IP. At boot Docker can start before tailscaled
+# assigns it, and those containers fail with "cannot assign requested address".
+$SUDO tee /etc/sysctl.d/90-homelab-nonlocal-bind.conf >/dev/null <<'SYSCTL'
+net.ipv4.ip_nonlocal_bind = 1
+net.ipv6.ip_nonlocal_bind = 1
+SYSCTL
+$SUDO sysctl -q -p /etc/sysctl.d/90-homelab-nonlocal-bind.conf
 
 log "Automatic security updates"
 $SUDO dpkg-reconfigure -f noninteractive unattended-upgrades

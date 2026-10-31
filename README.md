@@ -50,6 +50,7 @@ komodo/     Komodo resource sync (which stack runs on which machine)
 ansible/    Bootstrap, fleet-wide OS updates, security audit
 scripts/    bootstrap-node.sh, gen-secrets.sh, scan-images.sh
 docs/       Everything below
+CLAUDE.md   Rules for Claude Code; .claude/commands/ has /add-server, /add-app, /add-monitor
 ```
 
 ## Docs

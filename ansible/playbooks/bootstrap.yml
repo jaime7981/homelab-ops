@@ -8,8 +8,23 @@
     - name: Base packages
       ansible.builtin.apt:
         name: [ca-certificates, curl, git, ufw, unattended-upgrades, apt-listchanges,
-                needrestart, lynis, jq, cockpit]
+                needrestart, lynis, jq, cockpit, rsyslog]
         update_cache: true
+
+    # Debian 12+ / Raspberry Pi OS log only to journald; CrowdSec reads /var/log/auth.log.
+    - name: rsyslog enabled (provides /var/log/auth.log)
+      ansible.builtin.systemd:
+        name: rsyslog
+        enabled: true
+        state: started
+
+    # Admin ports are published on the Tailscale IP; allow binding it before tailscaled is up.
+    - name: Allow non-local bind
+      ansible.posix.sysctl:
+        name: "{{ item }}"
+        value: "1"
+        sysctl_file: /etc/sysctl.d/90-homelab-nonlocal-bind.conf
+      loop: [net.ipv4.ip_nonlocal_bind, net.ipv6.ip_nonlocal_bind]
 
     - name: Automatic security updates
       ansible.builtin.copy:
