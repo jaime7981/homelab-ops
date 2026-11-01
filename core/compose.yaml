@@ -46,7 +46,7 @@ services:
 
   traefik:
     <<: *common
-    image: traefik:v3.5
+    image: traefik:v3.7
     container_name: traefik
     command:
       - --api.dashboard=true
