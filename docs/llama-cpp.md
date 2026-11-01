@@ -15,7 +15,7 @@ The one part of the homelab that doesn't fit a standard tool, so it's handled di
 | Gateway container: deploy, logs, restart | Komodo stack `stacks/ai-pc/ai-gateway/` |
 | `llama-server` process: start/stop/restart, logs | **systemd** unit + Cockpit (Services, Logs) |
 | GPU usage, VRAM, temps | Beszel (GPU-enabled agent) |
-| API reachable from outside | Gatus check `core/gatus/endpoints/apps/ai-api.yaml` (`https://ai.DOMAIN/health`) |
+| API reachable from outside | Gatus check `core/gatus/endpoints/apps/ai-api.yaml` (`https://api.DOMAIN/health`) |
 | Process died | systemd `Restart=always` + Gatus alert |
 
 ### Run llama.cpp as a systemd service

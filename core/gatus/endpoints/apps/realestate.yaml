@@ -1,0 +1,12 @@
+# Family property admin app (tunnel ai-labs-realestate). Public, no Cloudflare Access in front.
+endpoints:
+  - name: Real estate
+    group: websites
+    url: https://realestate.${DOMAIN}
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == pat(*<div id=\"root\">*)"   # the React shell; a Cloudflare error page won't have it
+      - "[CERTIFICATE_EXPIRATION] > 240h"
+    alerts:
+      - type: ntfy

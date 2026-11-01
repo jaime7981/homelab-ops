@@ -80,14 +80,14 @@
         icon: mdi-web
         href: https://{{HOMEPAGE_VAR_DOMAIN}}
         siteMonitor: https://{{HOMEPAGE_VAR_DOMAIN}}
-    - Property admin:
+    - Real estate:
         icon: mdi-home-city
-        href: https://properties.{{HOMEPAGE_VAR_DOMAIN}}
-        siteMonitor: https://properties.{{HOMEPAGE_VAR_DOMAIN}}
+        href: https://realestate.{{HOMEPAGE_VAR_DOMAIN}}
+        siteMonitor: https://realestate.{{HOMEPAGE_VAR_DOMAIN}}
     - AI API:
         icon: mdi-robot
-        href: https://ai.{{HOMEPAGE_VAR_DOMAIN}}
-        siteMonitor: https://ai.{{HOMEPAGE_VAR_DOMAIN}}/health
+        href: https://api.{{HOMEPAGE_VAR_DOMAIN}}
+        siteMonitor: https://api.{{HOMEPAGE_VAR_DOMAIN}}/health
     - Plex:
         icon: plex.png
         href: https://app.plex.tv

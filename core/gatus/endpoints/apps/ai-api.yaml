@@ -2,8 +2,8 @@
 endpoints:
   - name: AI API
     group: websites
-    enabled: false                        # set to true once ai.DOMAIN is live
-    url: https://ai.${DOMAIN}/health
+    enabled: false                        # tunnel ailabs-llama-cpp was down (530) on 2026-10-31; enable once it's back
+    url: https://api.${DOMAIN}/health
     interval: 1m
     conditions:
       - "[STATUS] == 200"

@@ -6,7 +6,6 @@ endpoints:
     conditions:
       - "[STATUS] == 200"
       - "[CERTIFICATE_EXPIRATION] > 240h"
-      # Add a keyword that only appears when the site is healthy (catches error pages served with 200):
-      # - "[BODY] == pat(*some text from the page*)"
+      - "[BODY] == pat(*AI Labs*)"          # in the page title; catches error pages served with 200
     alerts:
       - type: ntfy

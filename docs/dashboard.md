@@ -44,8 +44,8 @@ Secrets for widgets are in `core/homepage.env` (git-ignored) and referenced as `
 - Websites:
     - Property admin:
         icon: mdi-home-city
-        href: https://properties.DOMAIN
-        siteMonitor: https://properties.DOMAIN
+        href: https://realestate.DOMAIN
+        siteMonitor: https://realestate.DOMAIN
         description: Family property management
 ```
 

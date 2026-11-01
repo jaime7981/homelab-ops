@@ -118,7 +118,7 @@ Monitors are files in `core/gatus/endpoints/` (one per app in `apps/`, one per m
 - `[CERTIFICATE_EXPIRATION] > 240h`.
 - Interval 1m; the ntfy default alert fires after 3 failures in a row.
 
-For each machine: `icmp://<tailscale-name>`. For the AI API: `https://ai.DOMAIN/health` with `[BODY].status == ok`.
+For each machine: `icmp://<tailscale-name>`. For the AI API: `https://api.DOMAIN/health` with `[BODY].status == ok`.
 Validate with `./scripts/check-gatus.sh` before pushing; after the Pi pulls, `docker logs gatus --since 2m` shows whether the new config was accepted.
 
 ## Backups
