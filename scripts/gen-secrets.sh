@@ -5,6 +5,7 @@ set -euo pipefail
 rand() { openssl rand -base64 "${1:-36}" | tr -d '\n=/+' | cut -c1-"${2:-48}"; }
 
 cat <<EOF
+# authentik values are only used with COMPOSE_PROFILES=authentik (harmless otherwise)
 AUTHENTIK_SECRET_KEY=$(rand 60 64)
 AUTHENTIK_PG_PASS=$(rand)
 KOMODO_DB_PASSWORD=$(rand)

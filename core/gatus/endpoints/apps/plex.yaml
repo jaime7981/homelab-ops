@@ -1,0 +1,11 @@
+# Plex on media-pc, checked over the tailnet (port 32400, host networking).
+endpoints:
+  - name: Plex
+    group: apps
+    enabled: false                        # set to true once media-pc runs Plex
+    url: http://media-pc:32400/identity
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+    alerts:
+      - type: ntfy

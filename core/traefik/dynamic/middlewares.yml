@@ -1,12 +1,14 @@
 # Middlewares referenced from docker labels as <name>@file.
 # Traefik renders this file as a Go template, so {{ env "X" }} reads the traefik container env.
+# AUTH_PROFILES = COMPOSE_PROFILES from core/.env: authentik forward-auth is added to the
+# chains only when it contains "authentik". Otherwise Cloudflare Access is the login.
 
 http:
   middlewares:
 
     # ── Building blocks ──────────────────────────────────────────────
 
-    # Single sign-on via the authentik embedded outpost (forward auth).
+    # Single sign-on via the authentik embedded outpost (forward auth). Optional, see chains.
     authentik:
       forwardAuth:
         address: http://authentik-server:9000/outpost.goauthentik.io/auth/traefik
@@ -60,7 +62,9 @@ http:
         middlewares:
           - crowdsec
           - public-allowlist     # see allowlist.yml (second IP layer, optional)
+{{- if contains "authentik" (env "AUTH_PROFILES") }}
           - authentik
+{{- end }}
           - security-headers
 
     # Tailnet hostnames (*.lab.DOMAIN).
@@ -68,5 +72,7 @@ http:
       chain:
         middlewares:
           - tailnet-only
+{{- if contains "authentik" (env "AUTH_PROFILES") }}
           - authentik
+{{- end }}
           - security-headers

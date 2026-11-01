@@ -5,8 +5,9 @@
 #   docker compose up -d
 # and open http://<vps-tailscale-name>:3001 over Tailscale (bound to the Tailscale IP only).
 #
-# Once this runs, remove the uptime-kuma service from core/compose.yaml (or keep both:
-# core checks internal services, off-site checks the public URLs).
+# Core keeps Gatus (all checks, in Git). This one only re-checks the public URLs from
+# outside, and must alert through a channel that doesn't depend on the house
+# (Telegram, email, ntfy.sh), not the ntfy on the Pi.
 
 name: offsite
 

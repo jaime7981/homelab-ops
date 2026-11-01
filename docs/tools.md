@@ -23,9 +23,9 @@ WireGuard mesh VPN between your devices and every PC. Also provides **Tailscale 
 Reverse proxy for every management UI. Routes by hostname, applies middleware chains (CrowdSec, IP allowlist, SSO, headers), and (optionally) TLS certs for the VPN-only `*.lab.DOMAIN` path.
 - `core/compose.yaml` (static config as flags), `core/traefik/dynamic/*.yml` (middlewares, allowlist).
 
-### authentik
-Identity provider: users, groups, MFA (TOTP, WebAuthn/passkeys), login/event log. Used as forward-auth for Traefik and as an OIDC provider for Komodo (and optionally Cloudflare Access).
-- `core/compose.yaml` (`authentik-*` services). Admin UI: `https://auth.DOMAIN/if/admin/`.
+### authentik *(optional)*
+Identity provider: users, groups, MFA (TOTP, WebAuthn/passkeys), login/event log. When enabled, it's forward-auth for Traefik and an OIDC provider for Komodo (and optionally Cloudflare Access). Off by default because Cloudflare Access already covers login for a single admin, and it's the heaviest part of the core (~0.7–1 GB RAM).
+- `core/compose.yaml` (`authentik-*` services, profile `authentik`). Enable: [access.md § 2](access.md#2-authentik-optional-sso-layer). Admin UI: `https://auth.DOMAIN/if/admin/`.
 - Docs: https://docs.goauthentik.io
 
 ### CrowdSec
@@ -58,12 +58,15 @@ Fleet-wide operations from your laptop over Tailscale: bootstrap a new PC, updat
 Lightweight metrics hub + agents: CPU, RAM, disk, network, temperatures, GPU, per-container usage. Threshold alerts (e.g. disk > 85%, CPU > 90% for 10 min, system down).
 - Hub: `core/`, agents: `node/`. Docs: https://beszel.dev
 
-### Uptime Kuma
-Checks every public URL and tunnel from the outside (HTTP, keyword, SSL expiry, TCP, ping). Status page for the Homepage widget.
-- In `core/`. Move or duplicate to `offsite/` on a VPS so you're alerted when the house is offline.
+### Gatus
+Uptime checks defined as YAML in Git: HTTP (status, body keyword, JSON fields, response time), certificate and domain expiry, TCP ports, ICMP ping, DNS. Status page at `status.DOMAIN`, alerts to ntfy, Homepage widget. Resolves Tailscale names, so machines and tailnet-only services are checked by name.
+- `core/gatus/` (one file per app/machine), validated by `scripts/check-gatus.sh`. Docs: https://github.com/TwiN/gatus
+
+### Uptime Kuma *(off-site only)*
+Same job, configured in its web UI. Used in `offsite/` on a VPS, with its own alert channel, so you're alerted when the whole house is offline (Gatus can't, since it runs in the house).
 
 ### Homepage
-The unified view: tiles with live data from Komodo, Beszel, Uptime Kuma, authentik and CrowdSec, plus site monitors and links to every console.
+The unified view: tiles with live data from Komodo, Beszel, Gatus and CrowdSec (and authentik, if enabled), plus site monitors and links to every console.
 - `core/homepage/*.yaml`. See [dashboard.md](dashboard.md).
 
 ### ntfy
@@ -88,3 +91,4 @@ Self-hosted push notifications. Every tool posts to a topic; the ntfy phone app 
 | Wazuh | Full SIEM. Heavy for 2–4 machines. CrowdSec + Lynis + Trivy cover the practical risks. |
 | Coolify / Dokploy | PaaS-style, opinionated about how apps are built and exposed. Less control over tunnels, GPUs and non-Docker services like llama.cpp. |
 | Keycloak | More enterprise. authentik is easier and has Traefik forward-auth built in. |
+| Uptime Kuma in the core | Monitors live in its database and are created by clicking; no official API. Gatus keeps them in Git, so `/add-monitor` is a commit. |

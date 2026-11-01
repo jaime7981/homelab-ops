@@ -1,0 +1,12 @@
+endpoints:
+  - name: Property admin
+    group: websites
+    enabled: false                        # set to true once properties.DOMAIN is live
+    url: https://properties.${DOMAIN}
+    interval: 1m
+    conditions:
+      # Behind Cloudflare Access an anonymous check sees the Access login page (200).
+      - "[STATUS] == 200"
+      - "[CERTIFICATE_EXPIRATION] > 240h"
+    alerts:
+      - type: ntfy

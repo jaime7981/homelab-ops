@@ -22,25 +22,25 @@
           url: http://beszel:8090
           username: "{{HOMEPAGE_VAR_BESZEL_USER}}"
           password: "{{HOMEPAGE_VAR_BESZEL_PASS}}"
-    - Uptime Kuma:
-        icon: uptime-kuma.png
+    - Gatus:
+        icon: gatus.png
         href: https://status.{{HOMEPAGE_VAR_DOMAIN}}
-        description: Websites & tunnels
+        description: Uptime checks (core/gatus/ in Git)
         widget:
-          type: uptimekuma
-          url: http://uptime-kuma:3001
-          slug: homelab              # create a status page with this slug
+          type: gatus
+          url: http://gatus:8080
 
 - Security:
-    - authentik:
-        icon: authentik.png
-        href: https://auth.{{HOMEPAGE_VAR_DOMAIN}}/if/admin/
-        description: Users, MFA, login logs
-        widget:
-          type: authentik
-          url: http://authentik-server:9000
-          key: "{{HOMEPAGE_VAR_AUTHENTIK_TOKEN}}"
-          version: 2
+    # Only with COMPOSE_PROFILES=authentik (docs/access.md § 2):
+    # - authentik:
+    #     icon: authentik.png
+    #     href: https://auth.{{HOMEPAGE_VAR_DOMAIN}}/if/admin/
+    #     description: Users, MFA, login logs
+    #     widget:
+    #       type: authentik
+    #       url: http://authentik-server:9000
+    #       key: "{{HOMEPAGE_VAR_AUTHENTIK_TOKEN}}"
+    #       version: 2
     - CrowdSec:
         icon: crowdsec.png
         href: https://app.crowdsec.net
@@ -74,7 +74,7 @@
         href: https://ai-pc:9090
         description: llama.cpp + AI gateway
 
-# Public sites, checked from the dashboard itself (Uptime Kuma checks from outside).
+# Public sites: quick live status here; checks with history and alerts are in Gatus (core/gatus/).
 - Websites:
     - Main site:            # ailabs.cl itself: only monitored, nothing here is served on the apex
         icon: mdi-web

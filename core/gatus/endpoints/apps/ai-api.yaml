@@ -1,0 +1,13 @@
+# llama.cpp server behind its own tunnel (docs/llama-cpp.md). /health answers {"status":"ok"}.
+endpoints:
+  - name: AI API
+    group: websites
+    enabled: false                        # set to true once ai.DOMAIN is live
+    url: https://ai.${DOMAIN}/health
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ok"
+      - "[CERTIFICATE_EXPIRATION] > 240h"
+    alerts:
+      - type: ntfy

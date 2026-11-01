@@ -1,0 +1,49 @@
+# The management core itself (this Pi), checked over the Docker network.
+endpoints:
+  # Public path: Cloudflare edge -> mgmt tunnel -> cloudflared -> Traefik.
+  # Behind Access this returns the Access login page (200); a dead tunnel returns 530/1033.
+  - name: Admin tunnel (mgmt)
+    group: core
+    url: https://dash.${DOMAIN}
+    interval: 2m
+    conditions:
+      - "[CONNECTED] == true"             # without it, a DNS failure (status 0) would pass
+      - "[STATUS] < 500"
+    alerts:
+      - type: ntfy
+
+  - name: Komodo
+    group: core
+    url: http://komodo-core:9120
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+    alerts:
+      - type: ntfy
+
+  - name: Beszel
+    group: core
+    url: http://beszel:8090/api/health
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+    alerts:
+      - type: ntfy
+
+  # No alert: if ntfy is down the alert can't be delivered anyway; the dashboard shows it.
+  - name: ntfy
+    group: core
+    url: http://ntfy/v1/health
+    interval: 2m
+    conditions:
+      - "[BODY].healthy == true"
+
+  # Only with COMPOSE_PROFILES=authentik:
+  # - name: authentik
+  #   group: core
+  #   url: http://authentik-server:9000/-/health/live/
+  #   interval: 2m
+  #   conditions:
+  #     - "[STATUS] == 204"
+  #   alerts:
+  #     - type: ntfy

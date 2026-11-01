@@ -15,8 +15,8 @@ The one part of the homelab that doesn't fit a standard tool, so it's handled di
 | Gateway container: deploy, logs, restart | Komodo stack `stacks/ai-pc/ai-gateway/` |
 | `llama-server` process: start/stop/restart, logs | **systemd** unit + Cockpit (Services, Logs) |
 | GPU usage, VRAM, temps | Beszel (GPU-enabled agent) |
-| API reachable from outside | Uptime Kuma HTTP check on `https://ai.DOMAIN/health` |
-| Process died | systemd `Restart=always` + Uptime Kuma alert |
+| API reachable from outside | Gatus check `core/gatus/endpoints/apps/ai-api.yaml` (`https://ai.DOMAIN/health`) |
+| Process died | systemd `Restart=always` + Gatus alert |
 
 ### Run llama.cpp as a systemd service
 
@@ -63,7 +63,7 @@ POST   /admin/users               create user, return key
 DELETE /admin/users/{id}          revoke
 ```
 
-Expose `/admin/*` **only** over Tailscale or behind Traefik + authentik (`secured-*` middlewares), never through the public AI tunnel. Trust the `X-authentik-username` header for who's calling.
+Expose `/admin/*` **only** over Tailscale or behind the `mgmt` tunnel + Traefik (`secured-*` middlewares), never through the public AI tunnel. Who's calling: `Cf-Access-Authenticated-User-Email` (set by Cloudflare Access), or `X-authentik-username` if authentik is enabled.
 
 A future custom portal ([dashboard.md](dashboard.md#later-a-custom-portal)) can then show models and users next to everything else.
 

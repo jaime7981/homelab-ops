@@ -6,13 +6,13 @@ Day-to-day tasks and what to do when something breaks.
 
 | Task | Go to |
 |---|---|
-| Is everything OK? | Homepage |
+| Is everything OK? | Homepage; up/down history in Gatus (`status.DOMAIN`) |
 | Deploy / redeploy / restart an app | Komodo → Stacks |
 | App logs | Komodo → Stack → Logs (search, follow) |
 | Non-Docker service logs (llama.cpp, system) | Cockpit → Logs, or `journalctl -u <svc>` |
 | Shell on a machine | Komodo → Server → Terminal, Cockpit → Terminal, or `ssh <machine>` (Tailscale) |
 | CPU / RAM / disk / GPU history | Beszel |
-| Who logged in / failed logins | authentik → Events. Tailscale console → Logs (SSH sessions). Cockpit → Logs (`sshd`). |
+| Who logged in / failed logins | Cloudflare Zero Trust → Logs → Access (authentik → Events, if enabled). Tailscale console → Logs (SSH sessions). Cockpit → Logs (`sshd`). |
 | Blocked attackers | `docker exec crowdsec cscli decisions list` / CrowdSec console |
 | OS updates | Automatic (security). Manual: `ansible-playbook playbooks/update.yml` or Cockpit → Software updates |
 
@@ -45,7 +45,8 @@ See [deploy.md § Upgrading the core](deploy.md#upgrading-the-core).
 | Container stdout/stderr | 5 × 20 MB per container (Docker rotation set by bootstrap) | Komodo |
 | systemd services, kernel, SSH | journald defaults | Cockpit, `journalctl` |
 | Traefik access log | grows. Add logrotate for `core/traefik/logs/` or prune monthly | CrowdSec reads it |
-| authentik events | 1 year (configurable) | authentik → Events |
+| Cloudflare Access logins | Per Cloudflare plan | Zero Trust → Logs → Access |
+| authentik events (if enabled) | 1 year (configurable) | authentik → Events |
 
 Need searchable, long-term logs across machines? Add Loki + Grafana Alloy later. It's not needed day one.
 
@@ -69,7 +70,7 @@ Dev work on a server: VS Code / Cursor *Remote-SSH* to `<machine>` works through
 | Security patches | Daily | unattended-upgrades |
 | Image CVEs | Weekly | `scripts/scan-images.sh` on each host (cron), reports to ntfy |
 | Host hardening | Monthly | `ansible-playbook playbooks/audit.yml` (Lynis hardening index, warnings) |
-| Access review | Quarterly | Tailscale machines/keys, authentik users, Cloudflare Access policies, Komodo API keys |
+| Access review | Quarterly | Tailscale machines/keys, Cloudflare Access policies, Komodo API keys (+ authentik users, if enabled) |
 
 Weekly scan cron (per host):
 
@@ -95,8 +96,8 @@ Phone: install the **ntfy** app → add server `https://ntfy.DOMAIN`, log in as 
 | Topic | Fed by |
 |---|---|
 | `homelab` | Komodo (deploy failed, server down, update available), Beszel (thresholds, system down) |
-| `homelab-uptime` | Uptime Kuma (site down/up, cert expiring) |
-| `homelab-security` | authentik (failed logins), Trivy scans, CrowdSec (optional) |
+| `homelab-uptime` | Gatus (site / service / machine down and recovered; machines at priority 4) |
+| `homelab-security` | Trivy scans, CrowdSec (optional), authentik failed logins (if enabled) |
 
 ### Wiring each tool
 
@@ -104,21 +105,21 @@ Phone: install the **ntfy** app → add server `https://ntfy.DOMAIN`, log in as 
 |---|---|
 | Komodo | Settings → Alerters → New → endpoint **Ntfy**, URL `http://ntfy/homelab` + token. Choose alert types. |
 | Beszel | Settings → Notifications → URL `ntfy://:tk_xxx@ntfy.DOMAIN/homelab` (Shoutrrr format). Then set per-system alerts. |
-| Uptime Kuma | Settings → Notifications → type **ntfy**, server `http://ntfy`, topic `homelab-uptime`, access token. Enable as default for all monitors. |
-| authentik | Events → Notification transports → *Webhook* `https://ntfy.DOMAIN/homelab-security` (add `Authorization: Bearer tk_xxx` via a webhook mapping). Rules → `login_failed`, `suspicious_request`. |
-| Telegram (optional) | Uptime Kuma and Beszel support Telegram directly. Add it as a second channel for "site down" and "system down" only. |
+| Gatus | Already wired in `core/gatus/config.yaml`. Put the token in `core/.env` as `GATUS_NTFY_TOKEN`, then `docker compose up -d gatus`. |
+| authentik (if enabled) | Events → Notification transports → *Webhook* `https://ntfy.DOMAIN/homelab-security` (add `Authorization: Bearer tk_xxx` via a webhook mapping). Rules → `login_failed`, `suspicious_request`. |
+| Telegram (optional) | Gatus (`alerting.telegram` in `core/gatus/config.yaml`) and Beszel support Telegram directly. Add it as a second channel for "site down" and "system down" only. |
 
 Keep the noise low: page yourself only for *down* and *security*. Leave "update available" for the dashboard.
 
 ### Websites and tunnels
 
-In Uptime Kuma, for each public site:
-- **HTTP(s) - Keyword**: the URL, plus a word that only appears when the app is healthy (catches Cloudflare error pages that return 200).
-- Certificate expiry notification: on.
-- Interval 60s, retries 2.
+Monitors are files in `core/gatus/endpoints/` (one per app in `apps/`, one per machine in `machines/`). Snippets and the workflow are in [core/gatus/README.md](../core/gatus/README.md). For each public site:
+- `[STATUS] == 200` plus a `[BODY] == pat(*...*)` keyword that only appears when the app is healthy (catches Cloudflare error pages that return 200).
+- `[CERTIFICATE_EXPIRATION] > 240h`.
+- Interval 1m; the ntfy default alert fires after 3 failures in a row.
 
-For each machine: **Ping** monitor on its Tailscale IP.
-For the AI API: HTTP monitor on its health endpoint (`/health` on llama.cpp's server).
+For each machine: `icmp://<tailscale-name>`. For the AI API: `https://ai.DOMAIN/health` with `[BODY].status == ok`.
+Validate with `./scripts/check-gatus.sh` before pushing; after the Pi pulls, `docker logs gatus --since 2m` shows whether the new config was accepted.
 
 ## Backups
 
@@ -126,7 +127,7 @@ What matters is the state listed in [architecture.md § Persistent data](archite
 
 Minimum viable:
 1. Komodo already writes nightly DB backups to the `komodo-backups` volume.
-2. Nightly `restic` from each host to an off-site target (Backblaze B2, another PC, a USB disk) for `/srv`, `/opt/homelab-ops/core/authentik`, and the Docker volumes `authentik-db`, `komodo-backups`, `kuma-data`, `ntfy-etc`. For Postgres, dump first (`pg_dump`) instead of copying live files.
+2. Nightly `restic` from each host to an off-site target (Backblaze B2, another PC, a USB disk) for `/srv` and the Docker volumes `komodo-backups` and `ntfy-etc` (plus `/opt/homelab-ops/core/authentik` and `authentik-db` if authentik is enabled). Gatus monitors are in Git; its history isn't worth backing up. For Postgres, dump first (`pg_dump`) instead of copying live files.
 3. `core/.env`, `homepage.env`, `node/.env`: store them in a password manager. They are the only files not in Git.
 
 Test a restore once. A backup you haven't restored is a hope, not a backup.
@@ -136,7 +137,7 @@ Test a restore once. A backup you haven't restored is a hope, not a backup.
 ## Runbooks
 
 ### A website is down
-1. Uptime Kuma: which check failed (DNS, TLS, keyword, timeout)?
+1. Gatus (`status.DOMAIN`): which condition failed (DNS, TLS, status, keyword, timeout)? The **Admin tunnel** check failing too means Cloudflare or the Pi's internet, not the app.
 2. Komodo → the stack: are containers running and healthy? Read logs.
 3. `cloudflared` sidecar logs: tunnel connected? Cloudflare Zero Trust → Tunnels: *Healthy*?
 4. Machine itself up? Beszel / Tailscale ping.
@@ -151,7 +152,7 @@ Test a restore once. A backup you haven't restored is a hope, not a backup.
 
 ### Locked out of the dashboard
 - Cloudflare Access denied (common cause: travelling, country rule) → fix the policy in Zero Trust from your phone. Meanwhile, from a tailnet device, Komodo and Beszel answer directly on `http://jaime-pi:9120` and `http://jaime-pi:8090`.
-- authentik broken → Komodo's local admin still works at `http://jaime-pi:9120` over Tailscale (no forward-auth on that port). Then `ssh` to the Pi and `docker compose logs authentik-server`.
+- authentik broken (if enabled) → comment `COMPOSE_PROFILES` in `core/.env` and `docker compose up -d` to fall back to Cloudflare Access only. Komodo's local admin still works at `http://jaime-pi:9120` over Tailscale (no forward-auth on that port). Then `ssh` to the Pi and `docker compose logs authentik-server`.
 - Tailscale broken too → LAN SSH with key, or console.
 
 ### Cloudflare is down
@@ -160,6 +161,6 @@ Public sites and admin hostnames are down (nothing to do but wait). Over Tailsca
 ### Suspected compromise
 1. Cut public exposure: Cloudflare → disable the affected tunnel(s).
 2. Tailscale console: expire keys of the affected machine, review SSH session logs.
-3. authentik → Events: logins, IPs, new tokens. Revoke sessions and tokens. Rotate passwords.
+3. Cloudflare Zero Trust → Logs → Access (and authentik → Events, if enabled): logins, IPs, new tokens. Revoke sessions (Zero Trust → My Team → Users → Revoke) and tokens. Rotate passwords.
 4. Komodo: rotate API keys, webhook secret, onboarding keys.
 5. Rebuild the machine from scratch (bootstrap + redeploy stacks from Git) rather than cleaning it.

@@ -118,7 +118,7 @@ Done. Remaining manual steps:
   3. Clone this repo, then:
        cd homelab-ops/node && cp .env.example .env && \$EDITOR .env
        docker compose up -d
-  4. Follow docs/add-machine.md to register it in Komodo, Beszel and Uptime Kuma.
+  4. Follow docs/add-machine.md to register it in Komodo, Beszel and Gatus.
 
 NOTE: Docker-published ports bypass ufw. Always publish admin ports on the
       Tailscale IP (100.x.y.z:PORT:PORT) or not at all; public apps go through

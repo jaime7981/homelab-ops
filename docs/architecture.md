@@ -4,9 +4,10 @@
 
 1. **Use existing tools; write code only for the gaps.** Monitoring, auth, deploy and alerting are solved problems. Custom code is limited to the llama.cpp admin layer and, later, an optional custom portal.
 2. **Nothing admin-related is open to the internet.** No port forwarding on the router. Admin traffic arrives only through a Cloudflare Tunnel (outbound connection); Tailscale is for SSH and agents.
-3. **Defense in depth on the tunnel path.** Cloudflare Access (identity + country + IP) → CrowdSec → Traefik IP allowlist → authentik SSO/MFA. Any single layer failing doesn't expose the tools.
+3. **Defense in depth on the tunnel path.** Cloudflare Access (identity + country + IP) → CrowdSec → Traefik IP allowlist → the tool's own login where it has one (Komodo, Beszel). Optional authentik SSO/MFA adds one more layer on your own hardware.
 4. **Agents dial out.** Komodo periphery, Beszel agent and CrowdSec agents connect *to* the core over Tailscale. New machines don't need inbound ports.
 5. **Git is the source of truth** for app definitions (`stacks/`). Secrets live in Komodo / `.env` files, never in Git.
+6. **Config as code wherever the tool allows it.** Stacks (`stacks/`, `komodo/sync.toml`), uptime checks (`core/gatus/`), dashboard (`core/homepage/`) and middlewares are files in Git, so an agent or a PR can change them. Only secrets and a few one-time UI steps live outside.
 
 ## Layers
 
@@ -16,11 +17,11 @@
 │                  SSO, country, IP, device         WireGuard, ACLs, SSH  │
 ├──────────────────────────────────────────────────────────────────────┤
 │ 2. Edge          cloudflared → Traefik           Traefik :443 on TS IP │
-│                  CrowdSec bouncer · IP allowlist · authentik fwd-auth   │
+│                  CrowdSec bouncer · IP allowlist · (authentik fwd-auth) │
 ├──────────────────────────────────────────────────────────────────────┤
 │ 3. Unified view  Homepage (widgets + links)                            │
 ├──────────────────────────────────────────────────────────────────────┤
-│ 4. Tools         Komodo · Beszel · Uptime Kuma · CrowdSec · ntfy        │
+│ 4. Tools         Komodo · Beszel · Gatus · CrowdSec · ntfy              │
 ├──────────────────────────────────────────────────────────────────────┤
 │ 5. Agents        komodo-periphery · beszel-agent · crowdsec-agent       │
 │    (every PC)    + Cockpit, unattended-upgrades, ufw, Tailscale SSH     │
@@ -75,9 +76,10 @@ Docker-published ports bypass `ufw`. That's why they're bound to the Tailscale I
 
 | Tool | How you log in | Why |
 |---|---|---|
-| Homepage, Uptime Kuma, Beszel, Traefik | authentik forward-auth (Traefik middleware) | Tools without good built-in auth, or where one SSO is simpler |
-| Komodo | forward-auth **and** Komodo OIDC → authentik | OIDC gives Komodo your identity (audit log); local admin kept as break-glass |
-| authentik | its own login + MFA/passkey | It *is* the identity provider |
+| Homepage, Gatus, Traefik | Cloudflare Access only (+ authentik forward-auth if enabled) | No built-in login worth having; Access already checks identity, country, IP |
+| Beszel | Cloudflare Access + its own login | Built-in users; also used by the Homepage widget |
+| Komodo | Cloudflare Access + its local login (+ OIDC → authentik if enabled) | Local admin also works over Tailscale as break-glass |
+| authentik *(optional)* | its own login + MFA/passkey | It *is* the identity provider |
 | ntfy | ntfy users/tokens (deny-all default) | Phone app can't do SSO redirects |
 | Komodo webhooks (`/listener`) | HMAC secret (`KOMODO_WEBHOOK_SECRET`) | GitHub calls it, not a person |
 | SSH | Tailscale SSH (identity-based), or keys only | No passwords anywhere |
@@ -90,16 +92,17 @@ Docker-published ports bypass `ufw`. That's why they're bound to the Tailscale I
 | Metrics | beszel-agent (each PC) → Beszel hub :8090 over Tailscale |
 | Logs | Komodo reads container logs via periphery on demand. Cockpit reads journald on each PC. |
 | Security events | Traefik access log + auth.log → CrowdSec engine → decisions → Traefik bouncer blocks the IP |
-| Alerts | Komodo / Beszel / Uptime Kuma / scripts → ntfy topic → phone (and Telegram if configured) |
+| Uptime checks | Gatus (core) → HTTP/ICMP/TCP to sites, tunnels and machines (Tailscale names via MagicDNS) |
+| Alerts | Komodo / Beszel / Gatus / scripts → ntfy topic → phone (and Telegram if configured) |
 
 ## Persistent data
 
 | Volume | Contents | Back up? |
 |---|---|---|
-| `authentik-db`, `core/authentik/` | Users, MFA devices, policies | Yes |
+| `authentik-db`, `core/authentik/` | Users, MFA devices, policies (only with authentik) | Yes |
 | `komodo-pg`, `komodo-backups` | Komodo servers, stacks, secrets, history | Yes (Komodo writes its own DB backups to `komodo-backups`) |
 | `beszel-data` | Metrics history, alert rules | Optional |
-| `kuma-data` | Monitors, history | Yes (small) |
+| `gatus-data` | Check history (monitors themselves are in Git) | No |
 | `ntfy-etc` | ntfy users/tokens | Yes (small) |
 | `traefik-certs` | Let's Encrypt account + certs | No (re-issued automatically) |
 | `crowdsec-*` | Decisions, hub items | No |

@@ -67,7 +67,7 @@ After that, every push that changes the folder redeploys it automatically.
 
 ## 6. Monitor it
 
-- **Uptime Kuma:** HTTP(s) monitor on the public URL, *keyword* check if it has a health endpoint, certificate expiry notification on.
+- **Gatus:** add `core/gatus/endpoints/apps/<app>.yaml` (status + keyword or health JSON, cert expiry; snippets in [core/gatus/README.md](../core/gatus/README.md)), run `./scripts/check-gatus.sh`, commit with the stack.
 - **Homepage:** add it under **Websites** with `siteMonitor:`, or under its machine.
 - **Komodo:** stack → enable alerts for *unhealthy* / *stopped*.
 

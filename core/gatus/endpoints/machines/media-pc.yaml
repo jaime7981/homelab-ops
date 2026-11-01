@@ -1,0 +1,11 @@
+# Is the machine on the tailnet? Name = Tailscale MagicDNS name (resolved via 100.100.100.100).
+endpoints:
+  - name: media-pc
+    group: machines
+    enabled: false                        # set to true once media-pc has joined the tailnet
+    url: icmp://media-pc
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+    alerts:
+      - type: ntfy

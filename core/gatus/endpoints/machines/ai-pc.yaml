@@ -1,0 +1,11 @@
+# Is the machine on the tailnet? Name = Tailscale MagicDNS name (resolved via 100.100.100.100).
+endpoints:
+  - name: ai-pc
+    group: machines
+    enabled: false                        # set to true once ai-pc has joined the tailnet
+    url: icmp://ai-pc
+    interval: 1m
+    conditions:
+      - "[CONNECTED] == true"
+    alerts:
+      - type: ntfy

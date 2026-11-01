@@ -9,7 +9,7 @@ Time: ~15 minutes. The machine needs no open ports; everything connects outbound
 - [ ] 3. Agents (`node/`)
 - [ ] 4. Komodo: server appears
 - [ ] 5. Beszel: system appears, alerts set
-- [ ] 6. Uptime Kuma / Homepage entries
+- [ ] 6. Gatus ping + Homepage entries
 - [ ] 7. Ansible inventory
 - [ ] 8. (optional) CrowdSec agent
 
@@ -65,9 +65,9 @@ The system turns green. Set alerts on it: **Status** (down), **Disk** > 85%, **C
 ## 6. Dashboard & uptime
 
 - `core/homepage/services.yaml` → add the machine under **Servers** (Cockpit link `https://<name>:9090`).
-- Uptime Kuma → add a **Ping** or **Tailscale Ping** monitor for the machine, plus HTTP monitors for any public apps it will host.
+- `core/gatus/endpoints/machines/<name>.yaml` → ping by Tailscale name (copy `media-pc.yaml`, set `enabled: true`). Run `./scripts/check-gatus.sh`.
 
-Commit and push. Homepage picks up config changes automatically.
+Commit and push, then update the Pi's checkout (`git -C /opt/homelab-ops pull`, or make the change on the Pi itself). Homepage and Gatus reload on their own.
 
 ## 7. Ansible
 
@@ -91,7 +91,7 @@ Detections from this machine now appear in `cscli alerts list` on the core, and 
 ## Removing a machine
 
 1. Komodo: move or destroy its stacks, then delete the server.
-2. Beszel: delete the system. Uptime Kuma: delete its monitors.
+2. Beszel: delete the system. Delete `core/gatus/endpoints/machines/<name>.yaml` and its apps' files.
 3. `docker compose down` in `node/`.
 4. Tailscale console: remove the machine.
 5. Remove it from `services.yaml`, `inventory.ini`, `komodo/sync.toml`. Commit.

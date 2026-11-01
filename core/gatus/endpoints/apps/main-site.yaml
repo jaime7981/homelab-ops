@@ -1,0 +1,12 @@
+endpoints:
+  - name: Main site
+    group: websites
+    url: https://${DOMAIN}
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      - "[CERTIFICATE_EXPIRATION] > 240h"
+      # Add a keyword that only appears when the site is healthy (catches error pages served with 200):
+      # - "[BODY] == pat(*some text from the page*)"
+    alerts:
+      - type: ntfy

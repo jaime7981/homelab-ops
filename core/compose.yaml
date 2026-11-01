@@ -7,6 +7,7 @@
 #   *.${DOMAIN} -> Cloudflare Access -> cloudflared (this file) -> traefik:8080 -> app
 # Nothing listens on the LAN or internet. Agent ports bind to the Tailscale IP only.
 # Optional second, VPN-only path (*.lab.${DOMAIN}): add compose.tailnet.yaml (see that file).
+# Optional SSO layer (authentik): COMPOSE_PROFILES=authentik in .env (see docs/access.md).
 
 name: mgmt
 
@@ -33,7 +34,7 @@ volumes:
   komodo-keys:
   komodo-backups:
   beszel-data:
-  kuma-data:
+  gatus-data:
   ntfy-cache:
   ntfy-etc:
   crowdsec-db:
@@ -67,6 +68,8 @@ services:
       TZ: ${TZ}
       DOMAIN: ${DOMAIN}
       CROWDSEC_BOUNCER_KEY: ${CROWDSEC_BOUNCER_KEY}
+      # middlewares.yml adds authentik forward-auth only when this contains "authentik"
+      AUTH_PROFILES: ${COMPOSE_PROFILES:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
@@ -108,16 +111,19 @@ services:
       - ${TAILSCALE_IP}:8081:8080      # Local API — node agents report here over Tailscale
     networks: [proxy]
 
-  # ─────────────────────────── Identity ───────────────────────────
+  # ─────────────────────────── Identity (optional) ───────────────────────────
+  # Off by default: Cloudflare Access is the login. Enable with COMPOSE_PROFILES=authentik
+  # for MFA/passkeys on your own hardware, groups, and OIDC for Komodo.
 
   authentik-db:
     <<: *common
+    profiles: [authentik]
     image: docker.io/library/postgres:16-alpine
     container_name: authentik-db
     environment:
       POSTGRES_DB: authentik
       POSTGRES_USER: authentik
-      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASS:?required}
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASS:-}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -d authentik -U authentik"]
       interval: 30s
@@ -130,6 +136,7 @@ services:
 
   authentik-server:
     <<: *common
+    profiles: [authentik]
     image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
     container_name: authentik-server
     command: server
@@ -139,7 +146,7 @@ services:
         condition: service_healthy
     environment: &authentik-env
       TZ: ${TZ}
-      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?required}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-}
       AUTHENTIK_POSTGRESQL__HOST: authentik-db
       AUTHENTIK_POSTGRESQL__NAME: authentik
       AUTHENTIK_POSTGRESQL__USER: authentik
@@ -163,6 +170,7 @@ services:
 
   authentik-worker:
     <<: *common
+    profiles: [authentik]
     image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG}
     container_name: authentik-worker
     command: worker
@@ -268,20 +276,31 @@ services:
       traefik.http.routers.beszel-pub.entrypoints: web
       traefik.http.routers.beszel-pub.middlewares: secured-public@file
 
-  # Move to ../offsite once you have a VPS, so it can alert when the house is down.
-  uptime-kuma:
+  # Uptime checks as code: every *.yaml under ./gatus is merged and reloaded on change.
+  # Add a monitor = add a file under gatus/endpoints/ (see gatus/README.md).
+  gatus:
     <<: *common
-    image: louislam/uptime-kuma:2
-    container_name: uptime-kuma
+    image: twinproduction/gatus:v5.37.0
+    container_name: gatus
+    environment:
+      TZ: ${TZ}
+      GATUS_CONFIG_PATH: /config
+      DOMAIN: ${DOMAIN}
+      NTFY_TOKEN: ${GATUS_NTFY_TOKEN:-}
+    # MagicDNS first, so checks can use Tailscale names (icmp://media-pc); container
+    # names (ntfy, komodo-core) still resolve through Docker's own DNS.
+    dns: [100.100.100.100, 1.1.1.1]
+    dns_search: ["${TAILNET_DOMAIN:?set TAILNET_DOMAIN in .env}"]
     volumes:
-      - kuma-data:/app/data
+      - ./gatus:/config:ro                # mount the folder, not files, so reloads are seen
+      - gatus-data:/data
     networks: [proxy]
     labels:
       traefik.enable: "true"
-      traefik.http.services.kuma.loadbalancer.server.port: "3001"
-      traefik.http.routers.kuma-pub.rule: Host(`status.${DOMAIN}`)
-      traefik.http.routers.kuma-pub.entrypoints: web
-      traefik.http.routers.kuma-pub.middlewares: secured-public@file
+      traefik.http.services.gatus.loadbalancer.server.port: "8080"
+      traefik.http.routers.gatus-pub.rule: Host(`status.${DOMAIN}`)
+      traefik.http.routers.gatus-pub.entrypoints: web
+      traefik.http.routers.gatus-pub.middlewares: secured-public@file
 
   ntfy:
     <<: *common

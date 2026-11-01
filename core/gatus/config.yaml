@@ -1,0 +1,35 @@
+# Gatus: uptime checks as code. Docs: https://github.com/TwiN/gatus
+#
+# Every *.yaml under core/gatus/ is merged into one config (endpoint lists are appended),
+# and Gatus reloads by itself when a file changes. Add a monitor = add a file under
+# endpoints/ (see README.md in this folder). Validate first: scripts/check-gatus.sh
+#
+# Variables come from the gatus service env in core/compose.yaml: ${DOMAIN}, ${NTFY_TOKEN}.
+# A literal "$" must be written "$$".
+
+ui:
+  title: Homelab status
+  header: Homelab
+
+storage:
+  type: sqlite
+  path: /data/gatus.db
+
+# If a pushed change is invalid, keep running the last good config instead of exiting.
+# Check `docker logs gatus` after every change (or run scripts/check-gatus.sh before pushing).
+skip-invalid-config-update: true
+
+alerting:
+  ntfy:
+    url: http://ntfy                      # ntfy container on the proxy network
+    topic: homelab-uptime
+    token: ${NTFY_TOKEN}                  # GATUS_NTFY_TOKEN in core/.env
+    click: https://status.${DOMAIN}
+    default-alert:
+      failure-threshold: 3                # ~3 min down before paging (1m interval)
+      success-threshold: 2
+      send-on-resolved: true
+    overrides:
+      - group: machines                   # a machine down matters more than one site
+        topic: homelab-uptime
+        priority: 4

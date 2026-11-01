@@ -6,7 +6,7 @@ The admin tools are reachable **only through a Cloudflare Tunnel**, the same pat
 |---|---|---|
 | Cloudflare Access | Who (identity), from which **country**, from which **IP** | Cloudflare Zero Trust dashboard |
 | Traefik | CrowdSec bans, optional second IP allowlist, security headers | `core/traefik/dynamic/` |
-| authentik | Users, passwords, MFA/passkeys, groups, login history | `https://auth.DOMAIN/if/admin/` |
+| authentik *(optional)* | Second login on your own hardware: MFA/passkeys, groups, OIDC for Komodo | `https://auth.DOMAIN/if/admin/` |
 | Tailscale | SSH into machines, agent → core connections | Tailscale admin console |
 
 ```
@@ -15,12 +15,14 @@ https://dash.ailabs.cl
      └─ mgmt tunnel → cloudflared → Traefik :8080
          └─ CrowdSec: IP not banned ✔
              └─ allowlist.yml ✔
-                 └─ authentik session? no → login + passkey ✔
+                 └─ (only with authentik) session? no → login + passkey ✔
                      └─ Homepage
 ```
 
+**Default: Cloudflare Access is the login.** It already checks identity, country and IP before a request reaches the house, and keeps a login log (Zero Trust → Logs → Access). authentik is an optional second layer: turn it on with `COMPOSE_PROFILES=authentik` (§ 2) if you want MFA/passkeys enforced on your own hardware, user groups (e.g. family sees only the dashboard), or OIDC login for Komodo.
+
 > **Rule:** in the `mgmt` tunnel every public hostname points to `http://traefik:8080`.
-> Never point a hostname straight at a container (`http://komodo-core:9120`): that skips CrowdSec and the authentik login.
+> Never point a hostname straight at a container (`http://komodo-core:9120`): that skips CrowdSec (and authentik, if enabled).
 
 ---
 
@@ -30,23 +32,24 @@ https://dash.ailabs.cl
 
 Domain: **`ailabs.cl`**. Existing app subdomains and their tunnels stay exactly as they are; this adds one more tunnel, `mgmt`, for the admin tools.
 
-1. Check none of `dash`, `komodo`, `beszel`, `status`, `auth`, `ntfy`, `traefik` are already used in DNS. If one is, rename it in the Traefik labels (`core/compose.yaml`) and in `homepage/services.yaml`.
+1. Check none of `dash`, `komodo`, `beszel`, `status`, `ntfy`, `traefik` (and `auth`, with authentik) are already used in DNS. If one is, rename it in the Traefik labels (`core/compose.yaml`) and in `homepage/services.yaml`.
 2. Zero Trust → Networks → Tunnels → **Create tunnel** `mgmt` (cloudflared) → copy the token into `core/.env` as `CLOUDFLARE_TUNNEL_TOKEN`.
 3. In the tunnel, add **Public hostnames**, all with service `HTTP` → `traefik:8080`:
-   `dash`, `komodo`, `beszel`, `status`, `auth`, `ntfy`, `traefik` (each `.ailabs.cl`). Cloudflare creates the DNS records.
+   `dash`, `komodo`, `beszel`, `status`, `ntfy`, `traefik` (each `.ailabs.cl`), plus `auth` if you enable authentik. Cloudflare creates the DNS records.
 
 ### Identity provider for Access
 
 Zero Trust → Settings → Authentication → Login methods:
 
 - **One-time PIN** (email code). Zero setup; start with this.
+- **Google** (or GitHub) login: a few minutes of setup, and you get Google's 2FA/passkeys in front of the admin tools without running authentik.
 - Later, optionally, **authentik as OIDC** so it's one identity everywhere: authentik → OAuth2/OpenID provider + application `cloudflare-access`, redirect URI `https://<team>.cloudflareaccess.com/cdn-cgi/access/callback`; Cloudflare → *Generic OIDC* with issuer `https://auth.ailabs.cl/application/o/cloudflare-access/`.
 
 ### Access applications
 
 Create these **before** the first `docker compose up`, so nothing is ever reachable unprotected.
 
-**A. `Homelab admin`** (self-hosted). Domains: `dash`, `komodo`, `beszel`, `status`, `traefik`, `auth` `.ailabs.cl`. Session 24h.
+**A. `Homelab admin`** (self-hosted). Domains: `dash`, `komodo`, `beszel`, `status`, `traefik` (+ `auth` with authentik) `.ailabs.cl`. Session 24h.
 
 Policy **Allow admins**:
 
@@ -56,7 +59,7 @@ Policy **Allow admins**:
 | Require | Country | Chile (add countries when travelling) |
 | Require *(optional)* | IP ranges | home, office, mobile ranges |
 
-**B. `authentik OIDC`**. Domain `auth.ailabs.cl`, path `application/o`. Policy: **Bypass**, include **Everyone**.
+**B. `authentik OIDC`** *(only with authentik)*. Domain `auth.ailabs.cl`, path `application/o`. Policy: **Bypass**, include **Everyone**.
 Komodo's server calls these OIDC endpoints (token, userinfo, keys) directly. Everything else on `auth` (login pages, admin) stays behind application A.
 
 **C. `Komodo webhook`**. Domain `komodo.ailabs.cl`, path `listener`. Policy: **Bypass**, include **Everyone**.
@@ -72,7 +75,25 @@ More specific paths (B, C) take precedence over the whole-host application (A).
 
 ---
 
-## 2. authentik (single login)
+## 2. authentik (optional SSO layer)
+
+Off by default. Without it, Homepage, Gatus, Beszel and Traefik are protected by Cloudflare Access alone, and Komodo and Beszel also keep their own logins.
+
+### Enable
+
+1. Cloudflare: add the `auth` public hostname to the `mgmt` tunnel (`HTTP traefik:8080`), add `auth` to Access application A, and create application B.
+2. `core/.env`: uncomment `COMPOSE_PROFILES=authentik`; make sure `AUTHENTIK_SECRET_KEY` and `AUTHENTIK_PG_PASS` are set (`scripts/gen-secrets.sh`).
+3. ```bash
+   cd /opt/homelab-ops/core
+   mkdir -p authentik/{data,certs,custom-templates}
+   docker compose up -d        # starts authentik-*, and recreates traefik so the chains include forward-auth
+   ```
+   Until step 2 of *Configure* below is done, the admin hostnames answer with an authentik error. That's expected: they fail closed.
+4. Uncomment the authentik tile in `core/homepage/services.yaml` and the authentik check in `core/gatus/endpoints/core.yaml`.
+
+To turn it off again: comment `COMPOSE_PROFILES` and `docker compose up -d --remove-orphans`.
+
+### Configure
 
 First run, at `https://auth.ailabs.cl/if/flow/initial-setup/` (already behind Access, so only you can reach it). Create your admin user, then:
 
@@ -94,7 +115,7 @@ Your app domains share the `ailabs.cl` cookie domain, but authentik only checks 
 
 Tailscale is **not** used to browse the admin tools. It does two things:
 
-- **SSH** into every machine (`ssh jaime@jaime-pi`), including when Cloudflare or authentik are down.
+- **SSH** into every machine (`ssh jaime@jaime-pi`), including when Cloudflare (or authentik) is down.
 - **Agent traffic**: Komodo periphery, Beszel and CrowdSec agents on other machines connect to the core on its Tailscale IP (ports 9120, 8090, 8081, bound only to that IP).
 
 ### ACL policy

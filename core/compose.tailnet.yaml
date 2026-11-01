@@ -47,7 +47,7 @@ services:
       traefik.http.routers.traefik-ts.service: api@internal
       traefik.http.routers.traefik-ts.middlewares: secured-tailnet@file
 
-  authentik-server:
+  authentik-server:                     # only runs with COMPOSE_PROFILES=authentik
     labels:
       traefik.http.routers.authentik-ts.rule: Host(`auth.lab.${DOMAIN}`)
       traefik.http.routers.authentik-ts.entrypoints: tailnet
@@ -66,11 +66,11 @@ services:
       traefik.http.routers.beszel-ts.entrypoints: tailnet
       traefik.http.routers.beszel-ts.middlewares: secured-tailnet@file
 
-  uptime-kuma:
+  gatus:
     labels:
-      traefik.http.routers.kuma-ts.rule: Host(`status.lab.${DOMAIN}`)
-      traefik.http.routers.kuma-ts.entrypoints: tailnet
-      traefik.http.routers.kuma-ts.middlewares: secured-tailnet@file
+      traefik.http.routers.gatus-ts.rule: Host(`status.lab.${DOMAIN}`)
+      traefik.http.routers.gatus-ts.entrypoints: tailnet
+      traefik.http.routers.gatus-ts.middlewares: secured-tailnet@file
 
   ntfy:
     labels:

@@ -7,8 +7,8 @@
 | Section | What you see | Click goes to |
 |---|---|---|
 | Top bar | Core host CPU / RAM / disk, time, search | — |
-| **Fleet** | Komodo: servers / stacks up vs down. Beszel: systems, alerts. Uptime Kuma: sites up / down, uptime %. | Each tool |
-| **Security** | authentik: users, logins, failed logins (24h). CrowdSec: alerts and bans (24h). | authentik admin, CrowdSec console, Traefik |
+| **Fleet** | Komodo: servers / stacks up vs down. Beszel: systems, alerts. Gatus: endpoints up / down, uptime. | Each tool |
+| **Security** | CrowdSec: alerts and bans (24h). authentik logins (if enabled). | CrowdSec console, Traefik |
 | **Servers** | One tile per machine | Cockpit on that machine |
 | **Websites** | Live status + response time per public site | The site |
 
@@ -34,8 +34,8 @@ Secrets for widgets are in `core/homepage.env` (git-ignored) and referenced as `
 |---|---|---|
 | Komodo | Komodo → Settings → API keys (a dedicated read-only user is better) | `HOMEPAGE_VAR_KOMODO_KEY`, `_SECRET` |
 | Beszel | Beszel → create user `homepage` (role readonly) | `HOMEPAGE_VAR_BESZEL_USER`, `_PASS` |
-| Uptime Kuma | Status page with slug `homelab` (no key needed) | — |
-| authentik | Directory → Tokens → API token for a service account | `HOMEPAGE_VAR_AUTHENTIK_TOKEN` |
+| Gatus | Nothing (reads the public API on the Docker network) | — |
+| authentik (if enabled) | Directory → Tokens → API token for a service account | `HOMEPAGE_VAR_AUTHENTIK_TOKEN` |
 | CrowdSec | `cscli machines add homepage ...` | `HOMEPAGE_VAR_CROWDSEC_USER`, `_PASS` |
 
 ## Adding a tile
@@ -62,10 +62,10 @@ Show a container's status dot (for containers on the core host):
 ## Family access
 
 To give family read-only access to the dashboard only:
-1. authentik: user in group `family`.
-2. Cloudflare Access: add their emails to a policy on `dash.DOMAIN` only (a separate Access application).
-3. Komodo/Beszel stay restricted to `admins` via authentik application policies.
+1. Cloudflare Access: a separate Access application for `dash.DOMAIN` (and `status.DOMAIN` if useful) with a policy that includes their emails.
+2. Application A (Komodo, Beszel, Traefik) keeps only your email, so they can't reach the tools.
+3. With authentik enabled you can manage this as groups (`family`, `admins`) instead.
 
 ## Later: a custom portal
 
-If you find yourself repeating the same multi-click actions (pull a model and reload llama.cpp, rotate an AI API key, redeploy a set of stacks), build a small app that calls the Komodo, Beszel and Uptime Kuma APIs. Deploy it as a stack behind the same `secured-public@file` / `secured-tailnet@file` middlewares. The `X-authentik-username` header it receives tells it who's calling, so it needs no login code of its own.
+If you find yourself repeating the same multi-click actions (pull a model and reload llama.cpp, rotate an AI API key, redeploy a set of stacks), build a small app that calls the Komodo, Beszel and Gatus APIs. Deploy it as a stack behind the same `secured-public@file` / `secured-tailnet@file` middlewares. The `Cf-Access-Authenticated-User-Email` header (or `X-authentik-username` with authentik) tells it who's calling, so it needs no login code of its own.

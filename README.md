@@ -3,19 +3,19 @@
 One place to run, watch and secure every machine and app in the homelab:
 Plex, the local AI API (llama.cpp), the personal website, the family property admin app, and whatever comes next.
 
-**One login, one dashboard**, reachable only through a Cloudflare Tunnel + Access (no ports open on the house network), with alerts on your phone. Tailscale is used for SSH and agent traffic.
+**One login, one dashboard**, reachable only through a Cloudflare Tunnel + Access (no ports open on the house network), with alerts on your phone. Tailscale is used for SSH and agent traffic. Uptime checks are files in Git (`core/gatus/`), so adding a monitor is a commit.
 
 ```mermaid
 flowchart TB
   subgraph Access["Access layer"]
-    CFA["Cloudflare Access<br/>SSO · country · IP rules"]
+    CFA["Cloudflare Access<br/>login · country · IP rules"]
   end
   CFA -->|"mgmt tunnel"| TR
-  TR["Traefik + authentik<br/>reverse proxy · single login · MFA · CrowdSec"]
+  TR["Traefik<br/>reverse proxy · CrowdSec · optional authentik SSO"]
   TR --> HP["Homepage<br/>unified dashboard"]
   HP --> KO["Komodo<br/>deploy · logs · shell"]
   HP --> BE["Beszel<br/>host + GPU metrics"]
-  HP --> UK["Uptime Kuma<br/>sites & tunnels"]
+  HP --> GA["Gatus<br/>uptime checks as code"]
   HP --> CS["CrowdSec<br/>attacks blocked"]
   KO & BE & CS --> AG["Agents on every PC<br/>Komodo periphery · Beszel agent · CrowdSec"]
   TS["Tailscale<br/>SSH · agent traffic"] -.-> AG
@@ -31,18 +31,18 @@ flowchart TB
 | OS updates | unattended-upgrades (security, automatic) + Ansible `update.yml` (manual) | `ansible/` |
 | Logs | Komodo (per container), Cockpit (systemd/journal, e.g. llama.cpp) | |
 | Health metrics | Beszel: CPU, RAM, disk, network, temps, GPU, per-container | `core/`, `node/` |
-| Websites overview | Uptime Kuma (from outside) + Homepage site monitors | `core/`, `offsite/` |
+| Websites & services up/down | Gatus: HTTP, keyword, cert expiry, TCP, ping; monitors are YAML files | `core/gatus/`, `offsite/` |
 | Security checks | CrowdSec (bans), Trivy (image CVEs), Lynis (host audit) | `ansible/playbooks/audit.yml`, `scripts/` |
 | Emergency / dev SSH | Tailscale SSH; Komodo web terminal; Cockpit terminal | `docs/operations.md` |
-| Login control | authentik: one login, MFA/passkeys, login history | `core/` |
+| Login control | Cloudflare Access (email code / Google, login log). Optional authentik for MFA/passkeys and groups | `docs/access.md` |
 | IP & region filtering | Cloudflare Access policies + Traefik IP allowlist | `docs/access.md` |
-| Notifications | ntfy (+ Telegram), fed by Komodo, Beszel, Uptime Kuma, scripts | `core/` |
+| Notifications | ntfy (+ Telegram), fed by Komodo, Beszel, Gatus, scripts | `core/` |
 | Single view | Homepage with live widgets for all of the above | `core/homepage/` |
 
 ## Repository layout
 
 ```
-core/       Management core: Traefik, authentik, Komodo, Beszel, Uptime Kuma, ntfy, Homepage, CrowdSec, cloudflared
+core/       Management core: Traefik, Komodo, Beszel, Gatus, ntfy, Homepage, CrowdSec, cloudflared (+ optional authentik)
 node/       Agents installed on every machine (Komodo periphery, Beszel agent, CrowdSec agent)
 offsite/    Uptime Kuma for a VPS outside the house (alerts when the whole house is down)
 stacks/     Your apps, one compose file per app, grouped by machine. Deployed by Komodo.
@@ -88,8 +88,8 @@ Then follow [docs/deploy.md](docs/deploy.md) from step 4 onwards.
 | Dashboard | `https://dash.ailabs.cl` |
 | Komodo | `https://komodo.ailabs.cl` |
 | Beszel | `https://beszel.ailabs.cl` |
-| Uptime Kuma | `https://status.ailabs.cl` |
-| authentik | `https://auth.ailabs.cl` |
+| Gatus (status) | `https://status.ailabs.cl` |
+| authentik (optional) | `https://auth.ailabs.cl` |
 | ntfy | `https://ntfy.ailabs.cl` (ntfy tokens, no Access) |
 | Traefik | `https://traefik.ailabs.cl` |
 | Cockpit (per machine) | `https://<machine>:9090` over Tailscale |
