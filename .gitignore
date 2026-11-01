@@ -6,6 +6,12 @@ homepage.env
 
 # Runtime data written next to the compose files
 core/traefik/logs/
+# Homepage writes these defaults on first start
+core/homepage/logs/
+core/homepage/custom.css
+core/homepage/custom.js
+core/homepage/kubernetes.yaml
+core/homepage/proxmox.yaml
 core/authentik/data/
 core/authentik/certs/
 core/authentik/custom-templates/
